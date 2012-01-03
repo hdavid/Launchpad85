@@ -40,11 +40,14 @@ class PreciseButtonSliderElement(ButtonSliderElement):
 		if (mode != self._mode):
 			self._mode = mode
 
+
+
 	def set_value_map(self, map):
 		assert isinstance(map, (tuple,
 		 type(None)))
 		assert (len(map) == len(self._buttons))
 		self._value_map = map
+
 
 
 	def send_value(self, value):

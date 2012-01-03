@@ -1,3 +1,4 @@
+
 import Live 
 from _Framework.ButtonElement import * 
 class ConfigurableButtonElement(ButtonElement):
@@ -72,3 +73,14 @@ class ConfigurableButtonElement(ButtonElement):
 	def send_value(self, value, force = False):
 		ButtonElement.send_value(self, value, (force or self._force_next_value))
 		self._force_next_value = False
+
+
+
+	def install_connections(self):
+		if self._is_enabled:
+			ButtonElement.install_connections(self)
+		elif ((self._msg_channel != self._original_channel) or (self._msg_identifier != self._original_identifier)):
+			self._install_translation(self._msg_type, self._original_identifier, self._original_channel, self._msg_identifier, self._msg_channel)
+
+
+

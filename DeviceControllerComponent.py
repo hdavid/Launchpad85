@@ -28,11 +28,14 @@ class DeviceControllerComponent(DeviceComponent):
 		self._precision_mode=False
 		self._remaining_buttons=None
 		self._device= None
+		self._is_active = False
 
 		DeviceComponent.__init__(self)
 
 		#Sliders
 		self._sliders = []
+		self.set_enabled(False)
+		
 		for column in range(8):
 			slider = PreciseButtonSliderElement(tuple([self._matrix.get_button(column, (7 - row)) for row in range(8) ]))
 			slider.set_parent(self)
@@ -41,6 +44,8 @@ class DeviceControllerComponent(DeviceComponent):
 		self._sliders=tuple(self._sliders)
 		self.set_parameter_controls(self._sliders)
 		
+		
+				
 		#on/off button
 		self.set_on_off_button(side_buttons[0])
 		#lock button
@@ -65,6 +70,9 @@ class DeviceControllerComponent(DeviceComponent):
 		#remaining buttons that need to be turned off !
 		self.set_remaining_buttons([side_buttons[5],side_buttons[6],side_buttons[7]])
 		self.song().add_appointed_device_listener(self._on_device_changed)
+		
+
+
 
 	def disconnect(self):
 		self.song().remove_appointed_device_listener(self._on_device_changed)
@@ -121,6 +129,7 @@ class DeviceControllerComponent(DeviceComponent):
 				self._next_bank_button.set_on_off_values(AMBER_FULL,AMBER_THIRD)
 			#update parent
 			DeviceComponent.update(self)
+			#reset sliders if no device
 			if(self._device==None):
 				for slider in self._sliders:
 					slider.reset()

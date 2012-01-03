@@ -28,15 +28,33 @@ from _Framework.EncoderElement import EncoderElement
 from _Framework.SessionComponent import SessionComponent
 from _Framework.ButtonMatrixElement import ButtonMatrixElement
 
-INITIAL_SCROLLING_DELAY = 4
-INTERVAL_SCROLLING_DELAY = 1
+#note marking for easier reading.
+MARK_C = True # marked as three block on the left of the grid
+MARK_C_COLOUR = AMBER_THIRD
+MARK_A = True # marked as one block on the left of the grid.
+MARK_A_COLOUR = AMBER_THIRD
+MARK_FULLTONES = False # marked as one block on the left of the grid
+MARK_FULLTONES_COLOUR = AMBER_THIRD
+MARK_SEMITONES = False # marked as one indented block on the left of the grid
+MARK_SEMITONES_COLOUR = AMBER_THIRD
 
+#metronome
+DISPLAY_METRONOME = True
+METRONOME_COLOUR = AMBER_FULL
+
+#quantization button colours. this must remain of length 4.
 QUANTIZATION_MAP = [1,0.5,0.25,0.125]#1/4 1/8 1/16 1/32
 QUANTIZATION_COLOR_MAP = [LED_OFF,AMBER_THIRD,AMBER_HALF,AMBER_FULL]
 
+#Velocity colour map. this must remain of lengh 3.
 VELOCITY_MAP = [70,90,110]
 VELOCITY_COLOR_MAP = [GREEN_THIRD,GREEN_HALF,GREEN_FULL]
+#played notes color highlight map
 VELOCITY_COLOR_HIGHLIGHT_MAP = [RED_THIRD,RED_HALF,RED_FULL]
+
+INITIAL_SCROLLING_DELAY = 4
+INTERVAL_SCROLLING_DELAY = 1
+
 STEPSEQ_MODE_NORMAL=1
 STEPSEQ_MODE_LANE_MUTE=2
 
@@ -46,8 +64,10 @@ class StepSequencerComponent(ControlSurfaceComponent):
 
 	def __init__(self, parent, matrix,side_buttons,nav_buttons):
 		ControlSurfaceComponent.__init__(self)
+				
 		self._is_active = False
 		self._parent = parent
+		
 		#buttons
 		self._matrix = matrix
 		self._width = self._matrix.width()
@@ -68,10 +88,10 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		self._velocity_shift_button = None
 		self._mute_shift_button = None
 		self._lane_mute_buttons = None
-		self._muted_lanes = []
-		self._mode = 1
 		
 		#values
+		self._muted_lanes = []
+		self._mode = 1
 		self._quantization_index = 2
 		self._quantization = QUANTIZATION_MAP[self._quantization_index]
 		self._velocity_index = 2
@@ -122,17 +142,6 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		self._scroll_right_ticks_delay = -1
 		self._scroll_left_ticks_delay = -1
 		self._register_timer_callback(self._on_timer)
-		
-	#def set_is_active(self,is_active):
-	#	self.is_active=is_active
-	
-	#def clear_buffer(self):
-	#	for x in range(self._width-1):
-	#		self._grid_buffer[x] = []
-	#		self._grid_back_buffer[x] = []
-	#		for y in range(self._width-1):
-	#			self._grid_buffer[x][y] = 0
-	#			self._grid_back_buffer[x][y] = 0
 	
 	def set_mode(mode):
 		self._mode=mode
@@ -161,7 +170,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		if self._is_active:
 			self.on_clip_slot_changed()
 			self._update_nav_buttons()
-			if( self._is_locked):
+			if(not self._is_locked):
 				if ((not self.application().view.is_view_visible('Detail')) or (not self.application().view.is_view_visible('Detail/Clip'))):
  					self.application().view.show_view('Detail')
  					self.application().view.show_view('Detail/Clip')
@@ -252,16 +261,17 @@ class StepSequencerComponent(ControlSurfaceComponent):
 			if self._sequencer_clip != None:
 				self._loop_start_index = int(self._sequencer_clip.loop_start / self._quantization / self._width)
 				self._loop_end_index = int(self._sequencer_clip.loop_end / self._quantization / self._width) - 1 #round down to next button
+				#self._parent._parent.log_message(str(self._sequencer_clip.loop_end)+" "+str(self._loop_end_index))
 				self._loop_length = self._sequencer_clip.loop_end - self._sequencer_clip.loop_start
 				loop_index_length = self._loop_end_index - self._loop_start_index + 1
 				if loop_index_length != self._loop_index_length:
 					self._loop_index_length = loop_index_length
-				if self._loop_start_index > (self._width -1):
-					self._loop_start_index = -1
-				elif self._loop_start_index < 0:
-					self._loop_start_index = 0
-				if self._loop_end_index > (self._width -1):
-					self._loop_end_index = (self._width -1)
+				#if self._loop_start_index > (self._width -1):
+				#	self._loop_start_index = -1
+				#elif self._loop_start_index < 0:
+				#	self._loop_start_index = 0
+				#if self._loop_end_index > (self._width -1):
+				#	self._loop_end_index = (self._width -1)
 				elif self._loop_end_index < 0:
 					self._loop_end_index = -1
 # MUTE LANES
@@ -271,15 +281,16 @@ class StepSequencerComponent(ControlSurfaceComponent):
 			if (self._lane_mute_buttons != None):
 				for index in range(len(self._lane_mute_buttons)):
 					self._lane_mute_buttons[(self._height - 1) - index].set_on_off_values(RED_FULL,RED_THIRD)
-					#if index <= self._quantization_index:
-						#self._lane_mute_buttons[index].turn_on()
-					#self._lane_mute_buttons[(self._height - 1) - index].turn_on() #invert if using scene launch buttons
-					#else:
-					#self._lane_mute_buttons[index].turn_off()
-					self._lane_mute_buttons[(self._height -1 ) - index].turn_off() #invert if using scene launch buttons					
+					self._lane_mute_buttons[(self._height -1) - index].turn_off()				
 
 
 	def _lane_mute_button_value(self, value, sender):
+		#self._parent._parent.schedule_message(1, self._lane_mute_button_value_message,[value,sender])
+		self._lane_mute_button_value_message([value,sender])
+		
+	def _lane_mute_button_value_message(self, values):
+		value=values[0]
+		sender=values[1]
 		assert (self._lane_mute_buttons != None)
 		assert (list(self._lane_mute_buttons).count(sender) == 1)
 		assert (value in range(128))
@@ -289,17 +300,22 @@ class StepSequencerComponent(ControlSurfaceComponent):
 					sender.turn_on()
 					lane_to_mute = (self._height - 1) - (list(self._lane_mute_buttons).index(sender)) #invert to get top to bottom index
 					pitch_to_mute = self._key_indexes[lane_to_mute] #invert top to bottom
+					if self._sequencer_clip!= None and self._sequencer_clip.is_midi_clip:
+						self._sequencer_clip.select_all_notes()
+						note_cache = self._sequencer_clip.get_selected_notes()
+						if self._clip_notes != note_cache:
+							self._clip_notes = note_cache
 					note_cache = list(self._clip_notes)
+					notes_changed = 0
 					for note in self._clip_notes:
 						if note[0] == pitch_to_mute:
-							mute = False
-							if note[4] == False:
-								mute = True
+							notes_changed = notes_changed + 1
 							note_to_mute = note
 							note_cache.remove(note)
-							note_cache.append([note_to_mute[0], note_to_mute[1], note_to_mute[2], note_to_mute[3], mute])
-					self._sequencer_clip.select_all_notes()
-					self._sequencer_clip.replace_selected_notes(tuple(note_cache)) 
+							note_cache.append([note_to_mute[0], note_to_mute[1], note_to_mute[2], note_to_mute[3], not note_to_mute[4]])
+					if notes_changed>0:
+						self._sequencer_clip.select_all_notes()
+						self._sequencer_clip.replace_selected_notes(tuple(note_cache)) 
 				else:
 					sender.turn_off() #turn LED off on button release
 
@@ -315,7 +331,6 @@ class StepSequencerComponent(ControlSurfaceComponent):
 				for button in self._lane_mute_buttons :
 					assert isinstance(button, ButtonElement)
 					button.add_value_listener(self._lane_mute_button_value, identify_sender=True)
-			##self._rebuild_callback()
 			 
 #NOTES CHANGES
 	def _on_notes_changed(self): #notes changed listener
@@ -370,6 +385,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 # MATRIX
 	def _update_matrix(self): #step grid LEDs are updated here
 		if self.is_enabled() and self._is_active:
+
 			#clear back buffer
 			for x in range(self._width):
 				for y in range(self._width):
@@ -378,46 +394,71 @@ class StepSequencerComponent(ControlSurfaceComponent):
 			#update back buffer
 			if self._sequencer_clip != None:# and self._sequencer_clip.is_midi_clip:
 				if self._sequencer_clip.is_midi_clip:
-					
-					#add play positition in amber
-					position = self._sequencer_clip.playing_position #position in beats (1/4 notes in 4/4 time)
-					grid_play_bank = int(position / self._quantization / self._width)%self._height # 0.25 for 16th notes;  0.5 for 8th notes
-					grid_play_position = int(position / self._quantization) - (grid_play_bank * self._width) #stepped postion
+
+					# add C and A notes markers
+					for note in range(0,127):
+							note_grid_y_position = index_of(self._key_indexes,note)
+							if(note_grid_y_position!=-1):
+								note_grid_y_position=self._height-1-note_grid_y_position
+
+								if(MARK_FULLTONES and (note%12==0 or note%12==2 or note%12==4 or note%12==5 or note%12==7 or note%12==9 or note%12==11) ):
+									self._grid_back_buffer[0][note_grid_y_position] = MARK_FULLTONES_COLOUR
+								
+								if(MARK_SEMITONES and (note%12==1 or note%12==3 or note%12==6 or note%12==8 or note%12==10) ):
+									self._grid_back_buffer[1][note_grid_y_position] = MARK_SEMITONES_COLOUR
+								
+								if(MARK_C and note%12==0):
+									self._grid_back_buffer[0][note_grid_y_position] = MARK_C_COLOUR
+									self._grid_back_buffer[1][note_grid_y_position] = MARK_C_COLOUR
+									self._grid_back_buffer[2][note_grid_y_position] = MARK_C_COLOUR
+
+								if(MARK_A and note%12==9):
+									self._grid_back_buffer[0][note_grid_y_position] = MARK_C_COLOUR
+
+
 					#play back position
-					if self._sequencer_clip.is_playing:
-						self._grid_back_buffer[grid_play_position][grid_play_bank]=AMBER_HALF
+					play_position = self._sequencer_clip.playing_position #position in beats (1/4 notes in 4/4 time)
+					grid_play_bank = int(play_position / self._quantization / self._width) # 0.25 for 16th notes;  0.5 for 8th notes
+					grid_play_position = int(play_position / self._quantization)%self._width #stepped postion
 					
+					# add play positition in amber	
+					if(DISPLAY_METRONOME):
+						if self._sequencer_clip.is_playing:
+							self._grid_back_buffer[grid_play_position][grid_play_bank%self._height] = METRONOME_COLOUR
+					
+					#display clip notes
 					for note in self._clip_notes:
-						position = note[1] #position in beats; range is 0.x to 15.x for 4 measures in 4/4 time (equivalent to 1/4 notes)
-						bank = int(position / self._quantization / self._width) #at 1/16th resolution in 4/4 time, each bank is 1/2 measure wide
-						grid_x_position = int(position / self._quantization) - (bank * self._width) #stepped postion at quantize resolution
-						key = note[0] #key: 0-127 MIDI note #
-						#if key >= self._key_index and key < (self._key_index + self._height):
-						index = index_of(self._key_indexes,key)
-						if index!=-1:
-							index=7-index
-							#grid_y_position = self._key_index + self._height -1 - key #invert bottom to top, to match button order
-							grid_y_position=index
-							velocity = note[3]
-							muted = note[4]
-							velocity_color=LED_OFF
-							if (not muted) and bank == grid_play_bank and grid_play_position==grid_x_position and self._sequencer_clip.is_playing:
-								#highligh playing notes in red. even if they are from other banks.
-								velocity_color = RED_THIRD
-								for index in range(len(VELOCITY_MAP)):
-									if velocity>=VELOCITY_MAP[index]:
-										velocity_color=VELOCITY_COLOR_HIGHLIGHT_MAP[index]
-								self._grid_back_buffer[grid_x_position][grid_y_position]=velocity_color;
-							elif bank == self._bank_index: #if note is in current bank, then update grid
-								if muted:
-									velocity_color = RED_THIRD
-								else:
-									velocity_color = GREEN_THIRD
-									for index in range(len(VELOCITY_MAP)):
-										if velocity>=VELOCITY_MAP[index]:
-											velocity_color=VELOCITY_COLOR_MAP[index]
-								if self._grid_back_buffer[grid_x_position][grid_y_position]==0:#do not erase current note highlight
-									self._grid_back_buffer[grid_x_position][grid_y_position]=velocity_color;
+						note_position = note[1] #position in beats; range is 0.x to 15.x for 4 measures in 4/4 time (equivalent to 1/4 notes)
+						note_bank = int(note_position / self._quantization / self._width) #at 1/16th resolution in 4/4 time, each bank is 1/2 measure wide
+						note_grid_x_position = int(note_position / self._quantization)%self._width #stepped postion at quantize resolution
+						note_key = note[0] #key: 0-127 MIDI note #
+						note_velocity = note[3]
+						note_muted = note[4]
+						#get row index for this note.
+						note_grid_y_position = index_of(self._key_indexes,note_key)
+						#display note
+						if note_grid_y_position!=-1:
+							#invert note row.
+							note_grid_y_position=self._height-1-note_grid_y_position
+							#compute colors
+							highlight_color = RED_THIRD
+							for index in range(len(VELOCITY_MAP)):
+								if note_velocity>=VELOCITY_MAP[index]:
+									highlight_color=VELOCITY_COLOR_HIGHLIGHT_MAP[index]
+							velocity_color = GREEN_THIRD
+							for index in range(len(VELOCITY_MAP)):
+								if note_velocity>=VELOCITY_MAP[index]:
+									velocity_color=VELOCITY_COLOR_MAP[index]
+							#highligh playing notes in red. even if they are from other banks.		
+							if (not note_muted)  and note_bank == grid_play_bank and grid_play_position==note_grid_x_position and self._sequencer_clip.is_playing:
+									self._grid_back_buffer[note_grid_x_position][note_grid_y_position]=highlight_color;
+							elif note_bank == self._bank_index: #if note is in current bank, then update grid
+									if note_muted:
+										self._grid_back_buffer[note_grid_x_position][note_grid_y_position]=RED_THIRD
+									else:
+										#do not erase current note highlight
+										if self._grid_back_buffer[note_grid_x_position][note_grid_y_position]!=highlight_color:
+											self._grid_back_buffer[note_grid_x_position][note_grid_y_position]=velocity_color;
 	
 			#caching : compare back buffer to buffer and update grid. this should minimize midi traffic quite a bit.
 			for x in range(self._width):
@@ -425,6 +466,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 					if(self._grid_back_buffer[x][y]!=self._grid_buffer[x][y] or self._force_update):
 						self._grid_buffer[x][y] = self._grid_back_buffer[x][y] 
 						self._matrix.send_value(x, y, self._grid_buffer[x][y])
+						#self._parent._parent.log_message(str(x)+"."+str(y)+" => "+str(self._grid_back_buffer[x][y]))
 			self._force_update=False
 			
 
@@ -432,8 +474,9 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		if self.is_enabled() and self._is_active:
 			if ((value != 0) or (not is_momentary)):
 				#self._parent._parent.log_message(str(x)+"."+str(y)+"."+str(value)+" "+"scheduled")
-				self._parent._parent.schedule_message(1, self._matrix_value_message,[value,x,y,is_momentary])
-	
+				#self._parent._parent.schedule_message(1, self._matrix_value_message,[value,x,y,is_momentary])
+				self._matrix_value_message([value,x,y,is_momentary])
+				
 	def _matrix_value_message(self, values): #value, x, y, is_momentary): #matrix buttons listener
 		value = values[0]
 		x = values[1]
@@ -458,6 +501,13 @@ class StepSequencerComponent(ControlSurfaceComponent):
 					time = (x + (self._bank_index * self._width)) * self._quantization #convert position to time in beats
 					velocity = self._velocity
 					duration = self._quantization # 0.25 = 1/16th note; 0.5 = 1/8th note
+					
+					if self._sequencer_clip!= None and self._sequencer_clip.is_midi_clip:
+						self._sequencer_clip.select_all_notes()
+						note_cache = self._sequencer_clip.get_selected_notes()
+						if self._clip_notes != note_cache:
+							self._clip_notes = note_cache
+					
 					note_cache = list(self._clip_notes)
 					for note in note_cache:
 						if pitch == note[0] and time == note[1]:

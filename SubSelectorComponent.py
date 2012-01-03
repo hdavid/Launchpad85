@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 # emacs-mode: -*- python-*-
-from consts import *
+
 from _Framework.ModeSelectorComponent import ModeSelectorComponent 
 from _Framework.ButtonElement import ButtonElement 
 from _Framework.ButtonMatrixElement import ButtonMatrixElement 

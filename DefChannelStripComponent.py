@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 # emacs-mode: -*- python-*-
-	
+
 import Live 
 from _Framework.ChannelStripComponent import ChannelStripComponent 
 from ConfigurableButtonElement import ConfigurableButtonElement 

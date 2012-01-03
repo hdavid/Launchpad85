@@ -1,5 +1,5 @@
+
 import Live 
-from consts import *
 from _Framework.MixerComponent import MixerComponent 
 from DefChannelStripComponent import DefChannelStripComponent 
 from _Framework.ButtonElement import ButtonElement 
@@ -30,9 +30,12 @@ class SpecialMixerComponent(MixerComponent):
 
 
 	def set_global_buttons(self, unarm_all, unsolo_all, unmute_all):
-		assert isinstance(unarm_all, (ButtonElement,type(None)))
-		assert isinstance(unsolo_all, (ButtonElement,type(None)))
-		assert isinstance(unmute_all, (ButtonElement,type(None)))
+		assert isinstance(unarm_all, (ButtonElement,
+		 type(None)))
+		assert isinstance(unsolo_all, (ButtonElement,
+		 type(None)))
+		assert isinstance(unmute_all, (ButtonElement,
+		 type(None)))
 		if (self._unarm_all_button != None):
 			self._unarm_all_button.remove_value_listener(self._unarm_all_value)
 		self._unarm_all_button = unarm_all

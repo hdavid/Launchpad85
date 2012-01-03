@@ -54,7 +54,9 @@ class MainSelectorComponent(ModeSelectorComponent):
 		for index in range(4):
 			self._sub_mode_index[index]=0
 		self.set_modes_buttons(top_buttons[4:])
-	
+
+
+
 	def disconnect(self):
 		for button in self._modes_buttons:
 			button.remove_value_listener(self._mode_value)
@@ -90,6 +92,7 @@ class MainSelectorComponent(ModeSelectorComponent):
 				assert isinstance(button, ButtonElement)
 				self._modes_buttons.append(button)
 				button.add_value_listener(self._mode_value, identify_sender)
+
 		self.set_mode(0)
 
 
@@ -101,6 +104,7 @@ class MainSelectorComponent(ModeSelectorComponent):
 
 	def on_enabled_changed(self):
 		self.update()
+
 
 
 	def set_mode(self, mode):
@@ -143,9 +147,9 @@ class MainSelectorComponent(ModeSelectorComponent):
 		return new_channel
 
 
+
 	def update(self):
 		assert (self._modes_buttons != None)
-
 		if self.is_enabled():
 			#for index in range(len(self._modes_buttons)):
 			#	self._modes_buttons[index].set_force_next_value()
@@ -155,8 +159,6 @@ class MainSelectorComponent(ModeSelectorComponent):
 			#		self._modes_buttons[index].turn_off()		
 			self._update_mode_buttons()
 			
-			for button in self._nav_buttons:
-				button.set_enabled(True)
 			
 			#update matrix and side buttons
 			for scene_index in range(8):
@@ -166,7 +168,10 @@ class MainSelectorComponent(ModeSelectorComponent):
 					#update matrix
 					self._matrix.get_button(track_index, scene_index).set_enabled(True)
 
-	
+
+			for button in self._nav_buttons:
+				button.set_enabled(True)
+
 			as_active = True
 			as_enabled = True
 			self._session.set_allow_update(False)
@@ -190,9 +195,9 @@ class MainSelectorComponent(ModeSelectorComponent):
 				if (self._sub_mode_index[self._mode_index]==0):
 					self._setup_session((not as_active), (as_enabled))
 					self._setup_step_sequencer((not as_active),0)
-					self._setup_user1(True,True,False)
 					self._setup_quick_mix(as_active)
 					self._setup_device_controller((not as_active))
+					self._setup_user1(True,True,True)
 				else:
 					self._setup_session((not as_active), (not as_enabled))
 					self._setup_step_sequencer((not as_active),0)
@@ -300,18 +305,19 @@ class MainSelectorComponent(ModeSelectorComponent):
 
 
 	def _setup_step_sequencer(self, as_active, mode):
-		if(self._stepseq._is_active!=as_active or self._stepseq._mode!=mode ):
-			if as_active: 
-				self._stepseq._mode=mode
-				self._stepseq._force_update = True
-				self._stepseq._is_active = True
-				self._stepseq.set_enabled(True)
-				self._stepseq._on_notes_changed()
-				self._config_button.send_value(32)
-			else:
-				self._stepseq._mode=1
-				self._stepseq._is_active = False
-				self._stepseq.set_enabled(False)
+		if(self._stepseq!=None):
+			if(self._stepseq._is_active!=as_active or self._stepseq._mode!=mode ):
+				if as_active: 
+					self._stepseq._mode=mode
+					self._stepseq._force_update = True
+					self._stepseq._is_active = True
+					self._stepseq.set_enabled(True)
+					self._stepseq._on_notes_changed()
+					self._config_button.send_value(32)
+				else:
+					self._stepseq._mode=1
+					self._stepseq._is_active = False
+					self._stepseq.set_enabled(False)
 
 
 	def _setup_device_controller(self, as_active):
@@ -396,6 +402,7 @@ class MainSelectorComponent(ModeSelectorComponent):
 				clip_slot.set_recording_value(RED_FULL)
 				clip_slot.name = ((str(track_index) + "_Clip_Slot_") + str(scene_index))
 				self._all_buttons.append(self._matrix.get_button(track_index, scene_index))
+
 
 		self._zooming.set_stopped_value(RED_FULL)
 		self._zooming.set_selected_value(AMBER_FULL)
