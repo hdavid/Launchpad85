@@ -27,16 +27,21 @@ from _Framework.ButtonElement import ButtonElement
 from _Framework.EncoderElement import EncoderElement
 from _Framework.SessionComponent import SessionComponent
 from _Framework.ButtonMatrixElement import ButtonMatrixElement
+import time
 
 #note marking for easier reading.
 MARK_C = True # marked as three block on the left of the grid
 MARK_C_COLOUR = AMBER_THIRD
 MARK_A = True # marked as one block on the left of the grid.
 MARK_A_COLOUR = AMBER_THIRD
-MARK_FULLTONES = False # marked as one block on the left of the grid
+MARK_FULLTONES = True # marked as one block on the left of the grid
 MARK_FULLTONES_COLOUR = AMBER_THIRD
 MARK_SEMITONES = False # marked as one indented block on the left of the grid
 MARK_SEMITONES_COLOUR = AMBER_THIRD
+
+#Scale 
+SCALE_ON_COLOUR = GREEN_THIRD
+SCALE_OFF_COLOUR = RED_THIRD
 
 #metronome
 DISPLAY_METRONOME = True
@@ -58,6 +63,8 @@ INTERVAL_SCROLLING_DELAY = 1
 STEPSEQ_MODE_NORMAL=1
 STEPSEQ_MODE_LANE_MUTE=2
 
+LONG_BUTTON_PRESS=0.500
+
 class StepSequencerComponent(ControlSurfaceComponent):
 	__module__ = __name__
 	__doc__ = ' Generic Step Sequencer Component '
@@ -67,12 +74,35 @@ class StepSequencerComponent(ControlSurfaceComponent):
 				
 		self._is_active = False
 		self._parent = parent
+		self._mode = 1
 		
-		#buttons
+		#matrix
 		self._matrix = matrix
 		self._width = self._matrix.width()
 		self._height = self._matrix.height()
-
+		#fill the cache
+		self._grid_buffer = [[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0]]
+		self._grid_back_buffer = [[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0]]
+		#notes
+		self._bank_index = 0 #bank index;
+		self._key_indexes=[0,0,0,0,0,0,0,0]
+		self._scale=[True,False,True,False,True,True,False,True,False,True,False,True]#which notes to display in scale mode.
+		self._key_indexes[0] = 36 #C1 Note
+		
+		self._sequencer_clip = None
+		self._clip_notes = []
+		self._force_update = True
+		self._display_bank = False
+		self._display_bank_time = time.time()
+		
+		#loop 
+		self._loop_start_index = 0
+		self._loop_end_index = 7
+		self._loop_index_length = 0
+		self._loop_length = None
+		self._loop_start = None
+		self._loop_end = None		
+		#buttons
 		self._buttons = None
 		self._nav_up_button = None
 		self._nav_down_button = None
@@ -85,52 +115,42 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		self._follow_button = None
 		self._lock_button = None
 		self._fold_button = None
+		self._scale_fold_button = None
 		self._velocity_shift_button = None
 		self._mute_shift_button = None
 		self._lane_mute_buttons = None
 		
-		#values
-		self._muted_lanes = []
-		self._mode = 1
+		#quantization
 		self._quantization_index = 2
 		self._quantization = QUANTIZATION_MAP[self._quantization_index]
-		self._velocity_index = 2
-		self._velocity = VELOCITY_MAP[self._velocity_index]
-		self._is_fold = False
 		self._is_locked = False
 		self._is_following = False
+		#velocity
+		self._velocity_index = 2
+		self._velocity = VELOCITY_MAP[self._velocity_index]
 		self._is_velocity_shifted = False
-		self._is_mute_shifted = False	
-
-		self._loop_start_index = 0
-		self._loop_end_index = 7
-		self._loop_index_length = 0
-		self._loop_length = None
-		self._loop_start = None
-		self._loop_end = None
-
-		#fill the cache
-		self._grid_buffer = [[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0]]
-		self._grid_back_buffer = [[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0]]
-		
-		#notes
-		self._bank_index = 0 #bank index;
-		self._key_indexes=[0,0,0,0,0,0,0,0]
-		self._key_indexes[0] = 36 #C1 Note
-		self._compute_key_indexes(True)#init note lanes
-		self._sequencer_clip = None
-		self._clip_notes = []
-		self._force_update = True
+		self._velocity_notes_pressed=0
+		self._velocity_last_press=time.time()
+		#mute
+		self._is_mute_shifted = False
+		self._muted_lanes = []
+		#fold
+		self._is_fold = False
+		self._is_scale_fold = False
+		#scale
+		self._scale_fold_shift = False
+		self._scale_fold_notes_pressed = 0
+		self._scale_fold_last_press = 0
 
 		#set buttons
 		self.set_loop_length_dec_button(side_buttons[0])
 		self.set_loop_length_inc_button(side_buttons[1])
 		self.set_quantization_button(side_buttons[2])
-		self.set_velocity_button(side_buttons[3])
 		#self.set_follow_button(side_buttons[4])
-		self.set_lock_button(side_buttons[4])
-		self.set_fold_button(side_buttons[5])
-		self.set_velocity_shift_button(side_buttons[6])
+		self.set_lock_button(side_buttons[3])
+		self.set_fold_button(side_buttons[4])
+		self.set_scale_fold_button(side_buttons[5])
+		self.set_velocity_button(side_buttons[6])
 		self.set_mute_shift_button(side_buttons[7])
 		self.set_button_matrix(matrix)
 		self.set_lane_mute_buttons(side_buttons)
@@ -142,6 +162,8 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		self._scroll_right_ticks_delay = -1
 		self._scroll_left_ticks_delay = -1
 		self._register_timer_callback(self._on_timer)
+		
+		self._compute_key_indexes(True)#init note lanes
 	
 	def set_mode(mode):
 		self._mode=mode
@@ -176,13 +198,13 @@ class StepSequencerComponent(ControlSurfaceComponent):
  					self.application().view.show_view('Detail/Clip')
 			if(self._mode==STEPSEQ_MODE_LANE_MUTE):
 				self._update_lane_mute_buttons()
-			else:	
-				self._update_velocity_button()
+			else:
 				self._update_follow_button()
 				self._update_quantization_button()
 				self._update_fold_button()
+				self._update_scale_fold_button()
 				self._update_lock_button()
-				self._update_velocity_shift_button()
+				self._update_velocity_button()
 				self._update_mute_shift_button()
 				self._update_loop_length_inc_button()
 				self._update_loop_length_dec_button()
@@ -280,8 +302,11 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		if self._is_active and self._mode==STEPSEQ_MODE_LANE_MUTE:
 			if (self._lane_mute_buttons != None):
 				for index in range(len(self._lane_mute_buttons)):
-					self._lane_mute_buttons[(self._height - 1) - index].set_on_off_values(RED_FULL,RED_THIRD)
-					self._lane_mute_buttons[(self._height -1) - index].turn_off()				
+					if self._sequencer_clip != None and self._sequencer_clip.is_midi_clip:
+						self._lane_mute_buttons[(self._height - 1) - index].set_on_off_values(RED_FULL,RED_THIRD)
+					else:				
+						self._lane_mute_buttons[(self._height - 1) - index].set_on_off_values(LED_OFF,LED_OFF)
+					self._lane_mute_buttons[(self._height -1) - index].turn_off()
 
 
 	def _lane_mute_button_value(self, value, sender):
@@ -395,70 +420,63 @@ class StepSequencerComponent(ControlSurfaceComponent):
 			if self._sequencer_clip != None:# and self._sequencer_clip.is_midi_clip:
 				if self._sequencer_clip.is_midi_clip:
 
-					# add C and A notes markers
-					for note in range(0,127):
-							note_grid_y_position = index_of(self._key_indexes,note)
-							if(note_grid_y_position!=-1):
+					if self._scale_fold_shift:
+						self._update_matrix_scale()
+
+					self._update_matrix_note_markers()
+					
+					if(self._display_bank):
+						self._update_matrix_bank()
+						if self._display_bank_time+0.25<time.time():
+							self._display_bank=False
+
+
+					if not self._scale_fold_shift or True:
+						#play back position
+						play_position = self._sequencer_clip.playing_position #position in beats (1/4 notes in 4/4 time)
+						grid_play_bank = int(play_position / self._quantization / self._width) # 0.25 for 16th notes;  0.5 for 8th notes
+						grid_play_position = int(play_position / self._quantization)%self._width #stepped postion
+						
+						# add play positition in amber	
+						if(DISPLAY_METRONOME):
+							if self._sequencer_clip.is_playing:
+								self._grid_back_buffer[grid_play_position][grid_play_bank%self._height] = METRONOME_COLOUR
+						
+						#display clip notes
+						for note in self._clip_notes:
+							note_position = note[1] #position in beats; range is 0.x to 15.x for 4 measures in 4/4 time (equivalent to 1/4 notes)
+							note_bank = int(note_position / self._quantization / self._width) #at 1/16th resolution in 4/4 time, each bank is 1/2 measure wide
+							note_grid_x_position = int(note_position / self._quantization)%self._width #stepped postion at quantize resolution
+							note_key = note[0] #key: 0-127 MIDI note #
+							note_velocity = note[3]
+							note_muted = note[4]
+							#get row index for this note.
+							note_grid_y_position = index_of(self._key_indexes,note_key)
+							#display note
+							if note_grid_y_position!=-1:
+								#invert note row.
 								note_grid_y_position=self._height-1-note_grid_y_position
-
-								if(MARK_FULLTONES and (note%12==0 or note%12==2 or note%12==4 or note%12==5 or note%12==7 or note%12==9 or note%12==11) ):
-									self._grid_back_buffer[0][note_grid_y_position] = MARK_FULLTONES_COLOUR
-								
-								if(MARK_SEMITONES and (note%12==1 or note%12==3 or note%12==6 or note%12==8 or note%12==10) ):
-									self._grid_back_buffer[1][note_grid_y_position] = MARK_SEMITONES_COLOUR
-								
-								if(MARK_C and note%12==0):
-									self._grid_back_buffer[0][note_grid_y_position] = MARK_C_COLOUR
-									self._grid_back_buffer[1][note_grid_y_position] = MARK_C_COLOUR
-									self._grid_back_buffer[2][note_grid_y_position] = MARK_C_COLOUR
-
-								if(MARK_A and note%12==9):
-									self._grid_back_buffer[0][note_grid_y_position] = MARK_C_COLOUR
-
-
-					#play back position
-					play_position = self._sequencer_clip.playing_position #position in beats (1/4 notes in 4/4 time)
-					grid_play_bank = int(play_position / self._quantization / self._width) # 0.25 for 16th notes;  0.5 for 8th notes
-					grid_play_position = int(play_position / self._quantization)%self._width #stepped postion
-					
-					# add play positition in amber	
-					if(DISPLAY_METRONOME):
-						if self._sequencer_clip.is_playing:
-							self._grid_back_buffer[grid_play_position][grid_play_bank%self._height] = METRONOME_COLOUR
-					
-					#display clip notes
-					for note in self._clip_notes:
-						note_position = note[1] #position in beats; range is 0.x to 15.x for 4 measures in 4/4 time (equivalent to 1/4 notes)
-						note_bank = int(note_position / self._quantization / self._width) #at 1/16th resolution in 4/4 time, each bank is 1/2 measure wide
-						note_grid_x_position = int(note_position / self._quantization)%self._width #stepped postion at quantize resolution
-						note_key = note[0] #key: 0-127 MIDI note #
-						note_velocity = note[3]
-						note_muted = note[4]
-						#get row index for this note.
-						note_grid_y_position = index_of(self._key_indexes,note_key)
-						#display note
-						if note_grid_y_position!=-1:
-							#invert note row.
-							note_grid_y_position=self._height-1-note_grid_y_position
-							#compute colors
-							highlight_color = RED_THIRD
-							for index in range(len(VELOCITY_MAP)):
-								if note_velocity>=VELOCITY_MAP[index]:
-									highlight_color=VELOCITY_COLOR_HIGHLIGHT_MAP[index]
-							velocity_color = GREEN_THIRD
-							for index in range(len(VELOCITY_MAP)):
-								if note_velocity>=VELOCITY_MAP[index]:
-									velocity_color=VELOCITY_COLOR_MAP[index]
-							#highligh playing notes in red. even if they are from other banks.		
-							if (not note_muted)  and note_bank == grid_play_bank and grid_play_position==note_grid_x_position and self._sequencer_clip.is_playing:
-									self._grid_back_buffer[note_grid_x_position][note_grid_y_position]=highlight_color;
-							elif note_bank == self._bank_index: #if note is in current bank, then update grid
-									if note_muted:
-										self._grid_back_buffer[note_grid_x_position][note_grid_y_position]=RED_THIRD
-									else:
-										#do not erase current note highlight
-										if self._grid_back_buffer[note_grid_x_position][note_grid_y_position]!=highlight_color:
-											self._grid_back_buffer[note_grid_x_position][note_grid_y_position]=velocity_color;
+								#compute colors
+								highlight_color = RED_THIRD
+								for index in range(len(VELOCITY_MAP)):
+									if note_velocity>=VELOCITY_MAP[index]:
+										highlight_color=VELOCITY_COLOR_HIGHLIGHT_MAP[index]
+								velocity_color = GREEN_THIRD
+								for index in range(len(VELOCITY_MAP)):
+									if note_velocity>=VELOCITY_MAP[index]:
+										velocity_color=VELOCITY_COLOR_MAP[index]
+								#highligh playing notes in red. even if they are from other banks.		
+								if (not note_muted)  and note_bank == grid_play_bank and grid_play_position==note_grid_x_position and self._sequencer_clip.is_playing:
+										self._grid_back_buffer[note_grid_x_position][note_grid_y_position]=highlight_color;
+								elif note_bank == self._bank_index: #if note is in current bank, then update grid
+										if note_muted:
+											self._grid_back_buffer[note_grid_x_position][note_grid_y_position]=RED_THIRD
+										else:
+											#do not erase current note highlight
+											if self._grid_back_buffer[note_grid_x_position][note_grid_y_position]!=highlight_color:
+												self._grid_back_buffer[note_grid_x_position][note_grid_y_position]=velocity_color;
+					if self._scale_fold_shift:
+						self._update_matrix_note_markers()
 	
 			#caching : compare back buffer to buffer and update grid. this should minimize midi traffic quite a bit.
 			for x in range(self._width):
@@ -469,6 +487,41 @@ class StepSequencerComponent(ControlSurfaceComponent):
 						#self._parent._parent.log_message(str(x)+"."+str(y)+" => "+str(self._grid_back_buffer[x][y]))
 			self._force_update=False
 			
+	def _update_matrix_scale(self):
+		#mode for selecting scale
+		for note_grid_y_position in range(0,8):
+			used = self._scale[self._key_indexes[7-note_grid_y_position]%12]
+			for note_grid_x_position in range(4,8):
+				if used :
+					self._grid_back_buffer[note_grid_x_position][note_grid_y_position] = SCALE_ON_COLOUR
+				else:
+					self._grid_back_buffer[note_grid_x_position][note_grid_y_position] = SCALE_OFF_COLOUR
+					
+	def _update_matrix_note_markers(self):
+		# add C and A notes markers
+		for note in range(0,127):
+				note_grid_y_position = index_of(self._key_indexes,note)
+				if(note_grid_y_position!=-1):
+					note_grid_y_position=self._height-1-note_grid_y_position
+
+					if(MARK_FULLTONES and (note%12==0 or note%12==2 or note%12==4 or note%12==5 or note%12==7 or note%12==9 or note%12==11) ):
+						self._grid_back_buffer[0][note_grid_y_position] = MARK_FULLTONES_COLOUR
+					
+					if(MARK_SEMITONES and (note%12==1 or note%12==3 or note%12==6 or note%12==8 or note%12==10) ):
+						self._grid_back_buffer[1][note_grid_y_position] = MARK_SEMITONES_COLOUR
+					
+					if(MARK_C and note%12==0):
+						self._grid_back_buffer[0][note_grid_y_position] = MARK_C_COLOUR
+						self._grid_back_buffer[1][note_grid_y_position] = MARK_C_COLOUR
+						self._grid_back_buffer[2][note_grid_y_position] = MARK_C_COLOUR
+
+					if(MARK_A and note%12==9):
+						self._grid_back_buffer[0][note_grid_y_position] = MARK_C_COLOUR
+	
+	
+	def _update_matrix_bank(self):
+		for i in range(0,8):
+			self._grid_back_buffer[self._bank_index%self._width][i]=AMBER_FULL
 
 	def _matrix_value(self, value, x, y, is_momentary): #matrix buttons listener
 		if self.is_enabled() and self._is_active:
@@ -495,6 +548,8 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		if self.is_enabled() and self._is_active:
 			if self._sequencer_clip != None and self._sequencer_clip.is_midi_clip:
 				if ((value != 0) or (not is_momentary)):
+					if(self._is_velocity_shifted):
+						self._velocity_notes_pressed = self._velocity_notes_pressed+1
 					#pitch = (self._key_index + self._height - 1) - y #invert top to bottom
 					#self._parent._parent.log_message("y:"+str(y))
 					pitch = self._key_indexes[7-y]
@@ -502,32 +557,38 @@ class StepSequencerComponent(ControlSurfaceComponent):
 					velocity = self._velocity
 					duration = self._quantization # 0.25 = 1/16th note; 0.5 = 1/8th note
 					
-					if self._sequencer_clip!= None and self._sequencer_clip.is_midi_clip:
-						self._sequencer_clip.select_all_notes()
-						note_cache = self._sequencer_clip.get_selected_notes()
-						if self._clip_notes != note_cache:
-							self._clip_notes = note_cache
-					
-					note_cache = list(self._clip_notes)
-					for note in note_cache:
-						if pitch == note[0] and time == note[1]:
-							if self._is_velocity_shifted:
-								#update velocity of the note
-								new_velocity_index=0
-								for index in range(len(VELOCITY_MAP)):
-									if note[3]>=VELOCITY_MAP[index]:
-										new_velocity_index=(index+1)%len(VELOCITY_MAP)
-								note_cache.append([note[0], note[1], note[2], VELOCITY_MAP[new_velocity_index], note[4]])
-							elif not self._is_mute_shifted:
-								note_cache.remove(note)
-							else:
-								#mute / un mute note.
-								note_cache.append([note[0], note[1], note[2], note[3], not note[4]])
-							break
+					if self._scale_fold_shift:
+						self._scale_fold_notes_pressed=self._scale_fold_notes_pressed+1
+						self._scale[pitch%12]=not self._scale[pitch%12]
+						self._update_matrix()
+
 					else:
-						note_cache.append([pitch, time, duration, velocity, self._is_mute_shifted])
-					self._sequencer_clip.select_all_notes()
-					self._sequencer_clip.replace_selected_notes(tuple(note_cache))
+						if self._sequencer_clip!= None and self._sequencer_clip.is_midi_clip:
+							self._sequencer_clip.select_all_notes()
+							note_cache = self._sequencer_clip.get_selected_notes()
+							if self._clip_notes != note_cache:
+								self._clip_notes = note_cache
+						
+						note_cache = list(self._clip_notes)
+						for note in note_cache:
+							if pitch == note[0] and time == note[1]:
+								if self._is_velocity_shifted:
+									#update velocity of the note
+									new_velocity_index=0
+									for index in range(len(VELOCITY_MAP)):
+										if note[3]>=VELOCITY_MAP[index]:
+											new_velocity_index=(index+1)%len(VELOCITY_MAP)
+									note_cache.append([note[0], note[1], note[2], VELOCITY_MAP[new_velocity_index], note[4]])
+								elif not self._is_mute_shifted:
+									note_cache.remove(note)
+								else:
+									#mute / un mute note.
+									note_cache.append([note[0], note[1], note[2], note[3], not note[4]])
+								break
+						else:
+							note_cache.append([pitch, time, duration, velocity, self._is_mute_shifted])
+						self._sequencer_clip.select_all_notes()
+						self._sequencer_clip.replace_selected_notes(tuple(note_cache))
 
 
 	def set_button_matrix(self, buttons):
@@ -542,39 +603,51 @@ class StepSequencerComponent(ControlSurfaceComponent):
 			self.update()
 			
 #FOLD NOTE
-	def _compute_key_indexes(self,force=False):
-		if self._is_fold:
+	def _compute_key_indexes(self,force=False,up=True,down=True):
+		if (self._is_fold or self._is_scale_fold) and not self._scale_fold_shift:
 			if force:
 				#when switching to fold mode 
 				key_index=self._key_indexes[0] #use previous base key
 				new_key_index = key_index #set default value if not match found
 				#find base note
 				inc=0
-				found=False
-				while not found and (key_index+inc<127 or key_index-inc>0):
-					if self._is_used(key_index+inc):#look upwards
-						new_key_index=key_index+inc
-						found=True
-						#self._parent._parent.log_message("found base note: +"+str(inc))
-					if self._is_used(key_index-inc):#look downwards
-						new_key_index=key_index-inc
-						found=True
-						#self._parent._parent.log_message("found base note: -"+str(inc))
+				found_base_note=False
+				while not found_base_note and (key_index+inc<=127 or key_index-inc>=0):
+					if key_index+inc<=127 and up:
+						#look upwards
+						if self._is_fold and self._is_used(key_index+inc) or self._is_scale_fold and self._scale[(key_index+inc)%12]:
+							new_key_index=key_index+inc
+							found_base_note=True
+							#self._parent._parent.log_message("found base note: +"+str(inc))
+					if key_index-inc>=0 and down:
+						#look downwards
+						if self._is_fold and self._is_used(key_index-inc) or self._is_scale_fold and self._scale[(key_index-inc)%12]:
+							new_key_index=key_index-inc
+							found_base_note=True
+							#self._parent._parent.log_message("found base note: -"+str(inc))
 					inc=inc+1
+					
 				self._key_indexes[0]=new_key_index #set found value
 				#fill in the 7 other lanes with notes
 				for i in range(7):
 					key_index=self._key_indexes[i+1 -1] +1 #set base for search
 					new_key_index=key_index # set an initial value if no match found
-					found=False
+					found_other_note=False
 					inc=0
-					while not found and (key_index+inc<127):
-						if self._is_used(key_index+inc):
+					while not found_other_note and (key_index+inc<127):
+						if self._is_fold and self._is_used(key_index+inc) or self._is_scale_fold and self._scale[(key_index+inc)%12]:
 							new_key_index=key_index+inc
-							found=True
+							found_other_note=True
+							found_base_note=True
+							#self._parent._parent.log_message("found note"+str(i+1)+": +"+str(inc))
+						if not found_base_note:
+							found_other_note=True
+							new_key_index=key_index+inc
 							#self._parent._parent.log_message("found note"+str(i+1)+": +"+str(inc))
 						inc=inc+1
 					self._key_indexes[i+1]=new_key_index #set found value
+		
+
 		else:
 			#when switching to unfold mode
 			new_key_index=self._key_indexes[0]
@@ -609,7 +682,6 @@ class StepSequencerComponent(ControlSurfaceComponent):
 			if (self._loop_length_dec_button  != None):
 				assert isinstance(button, ButtonElement)
 				self._loop_length_dec_button.add_value_listener(self._loop_length_dec_button_value, identify_sender=True)
-			##self._rebuild_callback()
 
 
 	def _loop_length_dec_button_value(self, value, sender):
@@ -626,8 +698,13 @@ class StepSequencerComponent(ControlSurfaceComponent):
 	def _update_loop_length_dec_button(self):
 		if self._is_active:
 			if (self._loop_length_dec_button != None) and self._mode==STEPSEQ_MODE_NORMAL:
-				self._loop_length_dec_button.set_on_off_values(GREEN_THIRD,LED_OFF)
-				self._loop_length_dec_button.turn_on()
+				if self._sequencer_clip != None and self._sequencer_clip.is_midi_clip:
+					self._loop_length_dec_button.set_on_off_values(GREEN_THIRD,LED_OFF)
+					self._loop_length_dec_button.turn_on()
+				else:
+					self._loop_length_dec_button.set_on_off_values(LED_OFF,LED_OFF)
+					self._loop_length_dec_button.turn_off()
+					
 
 	def set_loop_length_inc_button(self, button):
 		assert (isinstance(button,(ButtonElement,type(None))))
@@ -638,7 +715,6 @@ class StepSequencerComponent(ControlSurfaceComponent):
 			if (self._loop_length_inc_button  != None):
 				assert isinstance(button, ButtonElement)
 				self._loop_length_inc_button.add_value_listener(self._loop_length_inc_button_value, identify_sender=True)
-			##self._rebuild_callback()
 
 
 	def _loop_length_inc_button_value(self, value, sender):
@@ -655,32 +731,40 @@ class StepSequencerComponent(ControlSurfaceComponent):
 	def _update_loop_length_inc_button(self):
 		if self._is_active and self._mode==STEPSEQ_MODE_NORMAL:
 			if (self._loop_length_inc_button != None):
-				self._loop_length_inc_button.set_on_off_values(GREEN_THIRD,LED_OFF)
-				self._loop_length_inc_button.turn_on()
+				if self._sequencer_clip != None and self._sequencer_clip.is_midi_clip:
+					self._loop_length_inc_button.set_on_off_values(GREEN_THIRD,LED_OFF)
+					self._loop_length_inc_button.turn_on()
+				else:
+					self._loop_length_inc_button.set_on_off_values(LED_OFF,LED_OFF)
+					self._loop_length_inc_button.turn_off()
 
 
 # QUANTIZE
 	def _update_quantization_button(self):
 		if self._is_active and self._mode==STEPSEQ_MODE_NORMAL:
 			if (self._quantization_button != None):
-				self._quantization_button.set_on_off_values(QUANTIZATION_COLOR_MAP[self._quantization_index],LED_OFF)
-				self._quantization_button.turn_on()
+				if self._sequencer_clip != None and self._sequencer_clip.is_midi_clip:
+					self._quantization_button.set_on_off_values(QUANTIZATION_COLOR_MAP[self._quantization_index],LED_OFF)
+					self._quantization_button.turn_on()
+				else:
+					self._quantization_button.set_on_off_values(LED_OFF,LED_OFF)
+					self._quantization_button.turn_off()
+					
 		
 
 	def set_quantization_button(self, button):
 		assert (isinstance(button,(ButtonElement,type(None))))
-		if (self._velocity_button != button):
+		if (self._quantization_button != button):
 			if (self._quantization_button  != None):
 				self._quantization_button.remove_value_listener(self._quantization_button_value)
 			self._quantization_button = button
 			if (self._quantization_button  != None):
 				assert isinstance(button, ButtonElement)
 				self._quantization_button.add_value_listener(self._quantization_button_value, identify_sender=True)
-			##self._rebuild_callback()
 			self._update_quantization_button()
 
 	def _quantization_button_value(self, value, sender):
-		assert (self._velocity_button != None)
+		assert (self._quantization_button != None)
 		assert (value in range(128))
 		if self.is_enabled() and self._is_active and self._mode==STEPSEQ_MODE_NORMAL:
 			if ((value is not 0) or (not sender.is_momentary())):
@@ -689,46 +773,18 @@ class StepSequencerComponent(ControlSurfaceComponent):
 				self._update_quantization_button()	
 				self.update()				
 
-
-# VELOCITY
-	def _update_velocity_button(self):
-		if self._is_active:
-			if (self._velocity_button != None) and self._mode==STEPSEQ_MODE_NORMAL:
-				self._velocity_button.set_on_off_values(VELOCITY_COLOR_MAP[self._velocity_index],LED_OFF)
-				self._velocity_button.turn_on()
-
-	def set_velocity_button(self, button):
-		assert (isinstance(button,(ButtonElement,type(None))))
-		if (self._velocity_button != button):
-			if (self._velocity_button  != None):
-				self._velocity_button.remove_value_listener(self._velocity_button_value)
-			self._velocity_button = button
-			if (self._velocity_button  != None):
-				assert isinstance(button, ButtonElement)
-				self._velocity_button.add_value_listener(self._velocity_button_value, identify_sender=True)
-			##self._rebuild_callback()
-			self._update_velocity_button()
-
-	def _velocity_button_value(self, value, sender):
-		assert (self._velocity_button != None)
-		assert (value in range(128))
-		if self.is_enabled() and self._is_active and self._mode==STEPSEQ_MODE_NORMAL:
-			if ((value is not 0) or (not sender.is_momentary())):
-				self._velocity_index = (self._velocity_index+1)%len(VELOCITY_MAP)
-				self._velocity = VELOCITY_MAP[self._velocity_index]
-				self._update_velocity_button()	
-					
-
-
 # FOLLOW
 	def _update_follow_button(self):
 		if self._is_active:
 			if (self._follow_button != None) and self._mode==STEPSEQ_MODE_NORMAL:
-				if self._is_following:
+				if self._sequencer_clip != None and self._sequencer_clip.is_midi_clip:
 					self._follow_button.set_on_off_values(AMBER_FULL,AMBER_THIRD)
-					self._follow_button.turn_on()
+					if self._is_following:
+						self._follow_button.turn_on()
+					else:
+						self._follow_button.turn_off()
 				else:
-					self._follow_button.set_on_off_values(AMBER_FULL,AMBER_THIRD)
+					self._follow_button.set_on_off_values(LED_OFF,LED_OFF)
 					self._follow_button.turn_off()
 
 	def set_follow_button(self, button):
@@ -739,7 +795,6 @@ class StepSequencerComponent(ControlSurfaceComponent):
 			self._follow_button = button
 			if (self._follow_button != None):
 				self._follow_button.add_value_listener(self._follow_value,identify_sender=True)
-			##self._rebuild_callback()
 
 
 	def _follow_value(self, value,sender):
@@ -756,12 +811,16 @@ class StepSequencerComponent(ControlSurfaceComponent):
 	def _update_lock_button(self):
 		if self._is_active:
 			if (self._lock_button != None) and self._mode==STEPSEQ_MODE_NORMAL:
-				if self._is_locked:
+				if self._sequencer_clip != None and self._sequencer_clip.is_midi_clip:
 					self._lock_button.set_on_off_values(RED_FULL,RED_THIRD)
-					self._lock_button.turn_on()
+					if self._is_locked:
+						self._lock_button.turn_on()
+					else:
+						self._lock_button.turn_off()
 				else:
-					self._lock_button.set_on_off_values(RED_FULL,RED_THIRD)
+					self._lock_button.set_on_off_values(LED_OFF,LED_OFF)
 					self._lock_button.turn_off()
+					
 
 	def set_lock_button(self, button):
 		assert (isinstance(button,(ButtonElement,type(None))))
@@ -771,7 +830,6 @@ class StepSequencerComponent(ControlSurfaceComponent):
 			self._lock_button = button
 			if (self._lock_button != None):
 				self._lock_button.add_value_listener(self._lock_value,identify_sender=True)
-			##self._rebuild_callback()
 
 
 	def _lock_value(self, value,sender):
@@ -788,12 +846,15 @@ class StepSequencerComponent(ControlSurfaceComponent):
 	def _update_fold_button(self): 
 		if self._is_active:
 			if (self._fold_button != None) and self._mode==STEPSEQ_MODE_NORMAL:
-				if self._is_fold:
-					self._fold_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
-					self._fold_button.turn_on()
+				if self._sequencer_clip != None and self._sequencer_clip.is_midi_clip:
+					self._fold_button.set_on_off_values(AMBER_FULL,AMBER_THIRD)
+					if self._is_fold:
+						self._fold_button.turn_on()
+					else:
+						self._fold_button.turn_off()
 				else:
-					self._fold_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
-					self._fold_button.turn_off()
+					self._fold_button.set_on_off_values(LED_OFF,LED_OFF)
+					self._fold_button.turn_off()	
 
 
 	def set_fold_button(self, button):
@@ -812,60 +873,136 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		if self.is_enabled()and self._is_active and self._mode==STEPSEQ_MODE_NORMAL:
 			if ((value is not 0) or (not sender.is_momentary())):
 				self._is_fold = not self._is_fold
-				if self._is_fold:
-					self._fold_button.turn_on()
-				else:
-					self._fold_button.turn_off()
+				if(self._is_fold):
+					self._is_scale_fold = False
+				self._update_fold_button()
+				self._update_scale_fold_button()
 				self._compute_key_indexes(True)
 				self._update_matrix()
 
 
-
-
-# VELOCITY SHIFT
-	def _update_velocity_shift_button(self): 
+# SCALE FOLD 
+	def _update_scale_fold_button(self): 
 		if self._is_active:
-			if (self._velocity_shift_button != None) and self._mode==STEPSEQ_MODE_NORMAL:
-				if self._is_velocity_shifted:
-					self._velocity_shift_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
-					self._velocity_shift_button.turn_on()
+			if (self._scale_fold_button != None) and self._mode==STEPSEQ_MODE_NORMAL:
+				if self._sequencer_clip != None and self._sequencer_clip.is_midi_clip:
+					self._scale_fold_button.set_on_off_values(AMBER_FULL,AMBER_THIRD)
+					if self._is_scale_fold:
+						self._scale_fold_button.turn_on()
+					else:
+						self._scale_fold_button.turn_off()
 				else:
-					self._velocity_shift_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
-					self._velocity_shift_button.turn_off()
+					self._scale_fold_button.set_on_off_values(LED_OFF,LED_OFF)
+					self._scale_fold_button.turn_off()
 
 
-	def set_velocity_shift_button(self, button):
+	def set_scale_fold_button(self, button):
 		assert (isinstance(button,(ButtonElement,type(None))))
-		if (button != self._velocity_shift_button):
-			if (self._velocity_shift_button != None):
-				self._velocity_shift_button.remove_value_listener(self._velocity_shift_value)
-			self._velocity_shift_button = button
-			if (self._velocity_shift_button != None):
-				self._velocity_shift_button.add_value_listener(self._velocity_shift_value)
+		if (button != self._scale_fold_button):
+			if (self._scale_fold_button != None):
+				self._scale_fold_button.remove_value_listener(self._scale_fold_value)
+			self._scale_fold_button = button
+			if (self._scale_fold_button != None):
+				self._scale_fold_button.add_value_listener(self._scale_fold_value,identify_sender=True)
 
 
-	def _velocity_shift_value(self, value):
-		assert (self._velocity_shift_button != None)
+	def _scale_fold_value(self, value, sender):
+		assert (self._scale_fold_button != None)
+		assert (value in range(128))
+		if self.is_enabled() and self._is_active and self._mode==STEPSEQ_MODE_NORMAL:
+			if ((value is 0) or (not sender.is_momentary())):
+				self._scale_fold_shift=False
+				if self._scale_fold_notes_pressed==0 and time.time()-self._scale_fold_last_press<LONG_BUTTON_PRESS:
+					# note pressed. 
+					self._is_scale_fold = not self._is_scale_fold
+				elif self._scale_fold_notes_pressed > 0:
+					#notes pressed. on.
+					self._is_scale_fold = True
+				#disable other fold mode
+				notes_muted=False
+				for i in range(0,12):
+					if not self._scale[i]:
+						notes_muted=True
+				if not notes_muted:
+					self._is_scale_fold=False
+					
+				if self._is_scale_fold:
+					self._is_fold=False
+				self._update_scale_fold_button()
+				self._update_fold_button()
+				self._compute_key_indexes(True)
+				self._update_matrix()
+
+			if ((value is not 0) or (not sender.is_momentary())):
+				#enter seclection selection mode
+				self._scale_fold_shift=True
+				self._compute_key_indexes(True)
+				self._update_matrix()
+				#start counting
+				self._scale_fold_notes_pressed=0
+				self._scale_fold_last_press=time.time()
+
+# VELOCITY and VELOCITY SHIFT
+	def _update_velocity_button(self): 
+		if self._is_active:
+			if (self._velocity_button != None) and self._mode==STEPSEQ_MODE_NORMAL:
+				if self._sequencer_clip != None and self._sequencer_clip.is_midi_clip:
+					if self._is_velocity_shifted:
+						self._velocity_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
+						self._velocity_button.turn_on()
+					else:
+						self._velocity_button.set_on_off_values(VELOCITY_COLOR_MAP[self._velocity_index],LED_OFF)
+						self._velocity_button.turn_on()
+				else:
+					self._velocity_button.set_on_off_values(LED_OFF,LED_OFF)
+					self._velocity_button.turn_off()					
+
+
+	def set_velocity_button(self, button):
+		assert (isinstance(button,(ButtonElement,type(None))))
+		if (button != self._velocity_button):
+			if (self._velocity_button != None):
+				self._velocity_button.remove_value_listener(self._velocity_value)
+			self._velocity_button = button
+			if (self._velocity_button != None):
+				self._velocity_button.add_value_listener(self._velocity_value,identify_sender=True)
+
+
+	def _velocity_value(self, value, sender):
+		assert (self._velocity_button != None)
 		assert (value in range(128))
 		if self.is_enabled()and self._is_active and self._mode==STEPSEQ_MODE_NORMAL:
-			self._is_velocity_shifted = not self._is_velocity_shifted 
-			if self._is_velocity_shifted:
-				self._velocity_shift_button.turn_on()
-			else:
-				self._velocity_shift_button.turn_off()
+			if ((value is 0) or (not sender.is_momentary())):
+				#button released
+				if self._velocity_notes_pressed==0 and time.time()-self._velocity_last_press<LONG_BUTTON_PRESS:
+					#cycle thru velocities
+					self._velocity_index = (len(VELOCITY_MAP)+self._velocity_index+1)%len(VELOCITY_MAP)
+					self._velocity = VELOCITY_MAP[self._velocity_index]
+				self._is_velocity_shifted = False
+				self._update_velocity_button()
+			if ((value is not 0) or (not sender.is_momentary())):
+				#button pressed
+				self._velocity_notes_pressed=0
+				self._is_velocity_shifted = True
+				self._velocity_last_press=time.time()
+				
 
 
 
-# SHIFT
+# MUTE SHIFT 
 	def _update_mute_shift_button(self): 
 		if self._is_active:
 			if (self._mute_shift_button != None) and self._mode==STEPSEQ_MODE_NORMAL:
-				if self._is_mute_shifted:
+				if self._sequencer_clip != None and self._sequencer_clip.is_midi_clip:
 					self._mute_shift_button.set_on_off_values(RED_FULL,RED_THIRD)
-					self._mute_shift_button.turn_on()
+					if self._is_mute_shifted:
+						self._mute_shift_button.turn_on()
+					else:
+						self._mute_shift_button.turn_off()
 				else:
-					self._mute_shift_button.set_on_off_values(RED_FULL,RED_THIRD)
+					self._mute_shift_button.set_on_off_values(LED_OFF,LED_OFF)
 					self._mute_shift_button.turn_off()
+						
 
 
 	def set_mute_shift_button(self, button):
@@ -881,14 +1018,9 @@ class StepSequencerComponent(ControlSurfaceComponent):
 	def _mute_shift_value(self, value):
 		assert (self._mute_shift_button != None)
 		assert (value in range(128))
-		#self._parent._parent.log_message(str(self._mode))
 		if self.is_enabled()and self._is_active and self._mode==STEPSEQ_MODE_NORMAL:
-			#if value > 0:
 			self._is_mute_shifted = not self._is_mute_shifted
-			if self._is_mute_shifted:
-				self._mute_shift_button.turn_on()
-			else:
-				self._mute_shift_button.turn_off()
+			self._update_mute_shift_button()
 
 
 # NAV 
@@ -936,7 +1068,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 				if ((value != 0) or (not self._nav_up_button.is_momentary())):
 					if self._key_indexes[0] < (128 - self._height):
 						self._key_indexes[0] += 1
-						self._compute_key_indexes(True)
+						self._compute_key_indexes(True,True,False)
 						self._update_matrix()
 
 
@@ -956,7 +1088,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 				if ((value != 0) or (not self._nav_down_button.is_momentary())):
 					if self._key_indexes[0] > 0:
 						self._key_indexes[0] -= 1
-						self._compute_key_indexes(True)
+						self._compute_key_indexes(True,False,True)
 						self._update_matrix()
 
 
@@ -977,8 +1109,10 @@ class StepSequencerComponent(ControlSurfaceComponent):
 					if self._bank_index > 0:
 						self._bank_index -= 1
 						self._update_nav_buttons()
+						self._display_bank_time = time.time()
+						self._display_bank = True
 						self._update_matrix()
-
+						#self._parent._parent.schedule_message(1000, self._update_matrix)
 
 	def _nav_right_value(self, value):
 		assert (self._nav_right_button != None)
@@ -997,7 +1131,10 @@ class StepSequencerComponent(ControlSurfaceComponent):
 					if (self._bank_index)<self._loop_end_index:
 						self._bank_index += 1
 						self._update_nav_buttons()
+						self._display_bank_time = time.time()
+						self._display_bank = True
 						self._update_matrix()
+						#self._parent._parent.schedule_message(1, self._update_matrix)
 
 	def _update_nav_buttons(self):
 		if self.is_enabled() and self._is_active:
@@ -1045,37 +1182,43 @@ class StepSequencerComponent(ControlSurfaceComponent):
 			scroll_delays = [self._scroll_up_ticks_delay,self._scroll_down_ticks_delay,self._scroll_right_ticks_delay,self._scroll_left_ticks_delay]
 			if (scroll_delays.count(-1) < 4):
 				bank_increment = 0
-				key_increment = 0
-				if (self._scroll_right_ticks_delay > -1):
-					if self._is_scrolling():
-						bank_increment += 1
-						self._scroll_right_ticks_delay = INTERVAL_SCROLLING_DELAY
-					self._scroll_right_ticks_delay -= 1
-				if (self._scroll_left_ticks_delay > -1):
-					if self._is_scrolling():
-						bank_increment -= 1
-						self._scroll_left_ticks_delay = INTERVAL_SCROLLING_DELAY
-					self._scroll_left_ticks_delay -= 1
-				if (self._scroll_down_ticks_delay > -1):
-					if self._is_scrolling():
-						key_increment -= 1
-						self._scroll_down_ticks_delay = INTERVAL_SCROLLING_DELAY
-					self._scroll_down_ticks_delay -= 1
-				if (self._scroll_up_ticks_delay > -1):
-					if self._is_scrolling():
-						key_increment += 1
-						self._scroll_up_ticks_delay = INTERVAL_SCROLLING_DELAY
-					self._scroll_up_ticks_delay -= 1
 				if (self._bank_index + bank_increment) < self._width and (self._bank_index + bank_increment) >= 0:
+					if (self._scroll_right_ticks_delay > -1):
+						if self._is_scrolling():
+							bank_increment += 1
+							self._scroll_right_ticks_delay = INTERVAL_SCROLLING_DELAY
+						self._scroll_right_ticks_delay -= 1
+					if (self._scroll_left_ticks_delay > -1):
+						if self._is_scrolling():
+							bank_increment -= 1
+							self._scroll_left_ticks_delay = INTERVAL_SCROLLING_DELAY
+						self._scroll_left_ticks_delay -= 1
 					if self._bank_index + bank_increment != self._bank_index:
 						self._bank_index = self._bank_index + bank_increment
 						self._update_nav_buttons()
+						self._display_bank_time = time.time()
+						self._display_bank = True
 						self._update_matrix()
+						
+				key_increment = 0
 				if (self._key_indexes[0] + key_increment) < (128 - self._height + 1) and (self._key_indexes[0] + key_increment) >=0:
+					if (self._scroll_down_ticks_delay > -1):
+						if self._is_scrolling():
+							key_increment -= 1
+							self._scroll_down_ticks_delay = INTERVAL_SCROLLING_DELAY
+						self._scroll_down_ticks_delay -= 1
+					if (self._scroll_up_ticks_delay > -1):
+						if self._is_scrolling():
+							key_increment += 1
+							self._scroll_up_ticks_delay = INTERVAL_SCROLLING_DELAY
+						self._scroll_up_ticks_delay -= 1
+			
 					if self._key_indexes[0] + key_increment != self._key_indexes[0]:
 						self._key_indexes[0] = self._find_next_note(self._key_indexes[0],key_increment)
-						#self._parent._parent.log_message(" : "+str(self._key_indexes[0]))
-						self._compute_key_indexes(True)
+						if(key_increment>0):
+							self._compute_key_indexes(True,True,False)
+						else:
+							self._compute_key_indexes(True,False,True)	
 						self._update_matrix()
 
 	def _find_next_note(self,index,increment):

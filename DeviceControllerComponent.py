@@ -44,7 +44,12 @@ class DeviceControllerComponent(DeviceComponent):
 		self._sliders=tuple(self._sliders)
 		self.set_parameter_controls(self._sliders)
 		
-		
+		#device selection buttons
+		self.set_prev_device_button(top_buttons[0])
+		self.set_next_device_button(top_buttons[1])
+		#track selection buttons
+		self.set_prev_track_button(top_buttons[2])
+		self.set_next_track_button(top_buttons[3])
 				
 		#on/off button
 		self.set_on_off_button(side_buttons[0])
@@ -55,24 +60,14 @@ class DeviceControllerComponent(DeviceComponent):
 		self.set_bank_nav_buttons(side_buttons[2],side_buttons[3])
 		self._prev_bank_button=side_buttons[2]
 		self._next_bank_button=side_buttons[3]
-		
-		#device selection buttons
-		self.set_prev_device_button(top_buttons[0])
-		self.set_next_device_button(top_buttons[1])
-		#track selection buttons
-		self.set_prev_track_button(top_buttons[2])
-		self.set_next_track_button(top_buttons[3])
 		#precision
 		self.set_precision_button(side_buttons[4])
-		#change view
-		##self.set_view_button_button(side_buttons[5])
-		
 		#remaining buttons that need to be turned off !
 		self.set_remaining_buttons([side_buttons[5],side_buttons[6],side_buttons[7]])
+		
+		#selected device listener
 		self.song().add_appointed_device_listener(self._on_device_changed)
 		
-
-
 
 	def disconnect(self):
 		self.song().remove_appointed_device_listener(self._on_device_changed)
@@ -84,7 +79,7 @@ class DeviceControllerComponent(DeviceComponent):
 		self._prev_bank_button=None
 		self._next_bank_button=None
 		self._precision_button=None
-		self._precision_mode=False
+		self._precision_mode=None
 		self._remaining_buttons=None
 		self._device=None
 		
@@ -123,10 +118,14 @@ class DeviceControllerComponent(DeviceComponent):
  					self.application().view.show_view('Detail')
  					self.application().view.show_view('Detail/DeviceChain')
 			#update bank buttons colors
-			if(self._prev_bank_button != None):
-				self._prev_bank_button.set_on_off_values(AMBER_FULL,AMBER_THIRD)
-			if(self._next_bank_button != None):
-				self._next_bank_button.set_on_off_values(AMBER_FULL,AMBER_THIRD)
+			if self._device != None :
+				if(self._prev_bank_button != None):
+					self._prev_bank_button.set_on_off_values(AMBER_FULL,AMBER_THIRD)
+				if(self._next_bank_button != None):
+					self._next_bank_button.set_on_off_values(AMBER_FULL,AMBER_THIRD)
+			else :
+					self._prev_bank_button.set_on_off_values(LED_OFF,LED_OFF)
+					self._next_bank_button.set_on_off_values(LED_OFF,LED_OFF)
 			#update parent
 			DeviceComponent.update(self)
 			#reset sliders if no device
@@ -148,12 +147,11 @@ class DeviceControllerComponent(DeviceComponent):
 		for index in range(len(self._remaining_buttons)):
 			self._remaining_buttons[index].set_on_off_values(LED_OFF,LED_OFF)
 				
-	
 	def update_remaining_buttons(self):
 		if(self._remaining_buttons!=None):
 			for index in range(len(self._remaining_buttons)) :
 				if(self._remaining_buttons[index]!=None):
-					self._remaining_buttons[index].set_on_off_values(AMBER_FULL,LED_OFF)
+					self._remaining_buttons[index].set_on_off_values(LED_OFF,LED_OFF)
 					self._remaining_buttons[index].turn_off()
 				
 
@@ -162,13 +160,15 @@ class DeviceControllerComponent(DeviceComponent):
 	def update_lock_button(self):
 		#lock button
 		if (self._lock_button!=None and self.is_enabled()):
-			self._lock_button.set_on_off_values(RED_FULL,RED_THIRD)
+			
 			if (self._device != None):
+				self._lock_button.set_on_off_values(RED_FULL,RED_THIRD)
 				if (self._locked_to_device):
 					self._lock_button.turn_on()
 				else:
 					self._lock_button.turn_off()
 			else:
+				self._lock_button.set_on_off_values(LED_OFF,LED_OFF)
 				self._lock_button.turn_off()
 	
 	def _lock_callback_function(self):
@@ -188,24 +188,25 @@ class DeviceControllerComponent(DeviceComponent):
 # Precision button
 	def update_precision_button(self):
 		if (self._precision_button!=None and self.is_enabled()):
-			self._precision_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
 			if (self._precision_button!=None):
-				if self._precision_mode:
-					self._precision_button.turn_on()
+				if self._device != None : 
+					self._precision_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
+					if self._precision_mode:
+						self._precision_button.turn_on()
+					else:
+						self._precision_button.turn_off()
 				else:
+					self._precision_button.set_on_off_values(LED_OFF,LED_OFF)
 					self._precision_button.turn_off()
 
 	def _precision_value(self, value,sender):
 		if ((not sender.is_momentary()) or (value is not 0)):
 			if (self._precision_button!=None and self.is_enabled()):
 				self._precision_mode=not self._precision_mode
-				#self._parent._parent.log_message(str(self._precision_mode))
 				self.update_precision_button()
 				for slider in self._sliders:
 					slider.set_precision_mode(self._precision_mode)
 				
-			
-	
 	def set_precision_button(self, button):
 		assert (isinstance(button,(ButtonElement,type(None))))
 		if (self._precision_button != button):
@@ -216,17 +217,22 @@ class DeviceControllerComponent(DeviceComponent):
 				assert isinstance(button, ButtonElement)
 				self._precision_button.add_value_listener(self._precision_value, identify_sender=True)
 				self.update()
+
 					
 # ON OFF button
 	def update_on_off_button(self):
 		#on/off button
 		if (self._lock_button!=None and self.is_enabled()):
-			self._on_off_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
 			if (self._on_off_button!=None):
 				parameter = self._on_off_parameter()
-				if parameter != None and parameter.is_enabled and parameter.value>0:
-					self._on_off_button.turn_on()
+				if parameter != None :
+					self._on_off_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
+					if parameter.is_enabled and parameter.value>0:
+						self._on_off_button.turn_on()
+					else:
+						self._on_off_button.turn_off()
 				else:
+					self._on_off_button.set_on_off_values(LED_OFF,LED_OFF)
 					self._on_off_button.turn_off()
 
 	def _on_off_value(self, value):
@@ -269,6 +275,7 @@ class DeviceControllerComponent(DeviceComponent):
 		assert (value in range(128))
 		if self.is_enabled() and self._is_active:
 			if ((not sender.is_momentary()) or (value is not 0)):
+				#self._parent._parent.log_message(str(self.selected_track_idx()))
 				if(self.selected_track_idx() < len(self.song().tracks)-1 and not self._locked_to_device):
 					self.song().view.selected_track=self.song().tracks[self.selected_track_idx() + 1]
 	
@@ -305,14 +312,12 @@ class DeviceControllerComponent(DeviceComponent):
 # DEVICES
 	def update_device_buttons(self):
 		if self.is_enabled():
-			
 			if(self._prev_device_button!=None):
 				self._prev_device_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
 				if(self.selected_device_idx() >0  and not self._locked_to_device and len(self.selected_track().devices)>0):
 					self._prev_device_button.turn_on()
 				else:
-					self._prev_device_button.turn_off()
-					
+					self._prev_device_button.turn_off()		
 			if(self._next_device_button!=None):
 				self._next_device_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
 				if(self.selected_device_idx() < len(self.selected_track().devices)-1 and not self._locked_to_device and len(self.selected_track().devices)>0):
@@ -335,10 +340,10 @@ class DeviceControllerComponent(DeviceComponent):
 		assert (value in range(128))
 		if self.is_enabled() and self._is_active:
 			if ((not sender.is_momentary()) or (value is not 0)):
+				#self._parent._parent.log_message(str(self.selected_track()))
 				if self.selected_track()!=None and len(self.selected_track().devices)>0:
 					if(self.selected_device_idx() < len(self.selected_track().devices)-1 and not self._locked_to_device):
 						self.song().view.select_device(self.selected_track().devices[self.selected_device_idx() + 1])
-						#self.update()
 
 	def set_prev_device_button(self, button):
 		assert (isinstance(button,(ButtonElement,type(None))))
@@ -355,6 +360,7 @@ class DeviceControllerComponent(DeviceComponent):
 		assert (value in range(128))
 		if self.is_enabled() and self._is_active:
 			if ((not sender.is_momentary()) or (value is not 0)):
+				#self._parent._parent.log_message(str(self.selected_track()))
 				if self.selected_track()!=None and len(self.selected_track().devices)>0:
 					if(self.selected_device_idx()>0 and not self._locked_to_device):
 						self.song().view.select_device(self.selected_track().devices[self.selected_device_idx() - 1])
