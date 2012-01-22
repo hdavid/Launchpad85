@@ -64,6 +64,7 @@ STEPSEQ_MODE_NORMAL=1
 STEPSEQ_MODE_LANE_MUTE=2
 
 LONG_BUTTON_PRESS=0.500
+PAGE_SCROLL=12 #when scrolling by page, scroll by 12 semitones.
 
 class StepSequencerComponent(ControlSurfaceComponent):
 	__module__ = __name__
@@ -489,8 +490,8 @@ class StepSequencerComponent(ControlSurfaceComponent):
 			
 	def _update_matrix_scale(self):
 		#mode for selecting scale
-		for note_grid_y_position in range(0,8):
-			used = self._scale[self._key_indexes[7-note_grid_y_position]%12]
+		for note_grid_y_position in range(0,self._height):
+			used = self._scale[self._key_indexes[self._height-1-note_grid_y_position]%12]
 			for note_grid_x_position in range(4,8):
 				if used :
 					self._grid_back_buffer[note_grid_x_position][note_grid_y_position] = SCALE_ON_COLOUR
@@ -520,7 +521,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 	
 	
 	def _update_matrix_bank(self):
-		for i in range(0,8):
+		for i in range(0,self._height):
 			self._grid_back_buffer[self._bank_index%self._width][i]=AMBER_FULL
 
 	def _matrix_value(self, value, x, y, is_momentary): #matrix buttons listener
@@ -552,7 +553,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 						self._velocity_notes_pressed = self._velocity_notes_pressed+1
 					#pitch = (self._key_index + self._height - 1) - y #invert top to bottom
 					#self._parent._parent.log_message("y:"+str(y))
-					pitch = self._key_indexes[7-y]
+					pitch = self._key_indexes[self._height-1-y]
 					time = (x + (self._bank_index * self._width)) * self._quantization #convert position to time in beats
 					velocity = self._velocity
 					duration = self._quantization # 0.25 = 1/16th note; 0.5 = 1/8th note
@@ -629,7 +630,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 					
 				self._key_indexes[0]=new_key_index #set found value
 				#fill in the 7 other lanes with notes
-				for i in range(7):
+				for i in range(self._height-1):
 					key_index=self._key_indexes[i+1 -1] +1 #set base for search
 					new_key_index=key_index # set an initial value if no match found
 					found_other_note=False
@@ -651,7 +652,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		else:
 			#when switching to unfold mode
 			new_key_index=self._key_indexes[0]
-			for i in range(8): # set the 8 lanes incrementally
+			for i in range(self._height): # set the 8 lanes incrementally
 				self._key_indexes[i]=new_key_index+i
 		
 		#self._parent._parent.log_message("keys : ")
@@ -1057,7 +1058,19 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		assert (value in range(128))
 		if self.is_enabled() and self._is_active:
 			if self._is_mute_shifted:
-				pass
+				if ((value != 0) or (not self._nav_up_button.is_momentary())):
+					if not self._is_fold and not self._is_scale_fold:
+						if self._key_indexes[self._height-1] < 127-PAGE_SCROLL+1:
+							for i in range(PAGE_SCROLL):
+								self._key_indexes[0] += 1
+								self._compute_key_indexes(True,True,False)
+						self._update_matrix()
+						self._update_nav_buttons()
+					if self._is_scale_fold and self._key_indexes[self._height-1] < 127-PAGE_SCROLL+1:
+						for i in range(self._height):
+							self._key_indexes[i]=self._key_indexes[i] + PAGE_SCROLL
+						self._update_matrix()
+						self._update_nav_buttons()
 			else:
 				button_is_momentary = self._nav_up_button.is_momentary()
 				if button_is_momentary:
@@ -1066,10 +1079,11 @@ class StepSequencerComponent(ControlSurfaceComponent):
 					else:
 						self._scroll_up_ticks_delay = -1			
 				if ((value != 0) or (not self._nav_up_button.is_momentary())):
-					if self._key_indexes[0] < (128 - self._height):
+					if self._key_indexes[self._height-1] < 127:
 						self._key_indexes[0] += 1
 						self._compute_key_indexes(True,True,False)
 						self._update_matrix()
+						self._update_nav_buttons()
 
 
 	def _nav_down_value(self, value):
@@ -1077,7 +1091,19 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		assert (value in range(128))
 		if self.is_enabled() and self._is_active:
 			if self._is_mute_shifted:
-				pass
+				if ((value != 0) or (not self._nav_up_button.is_momentary())):
+					if not self._is_fold and not self._is_scale_fold:
+						if self._key_indexes[0] > PAGE_SCROLL-1:
+							for i in range(PAGE_SCROLL):
+								self._key_indexes[0] -= 1
+								self._compute_key_indexes(True,True,False)
+						self._update_matrix()
+						self._update_nav_buttons()
+					if self._is_scale_fold and self._key_indexes[0] > PAGE_SCROLL-1:
+						for i in range(self._height):
+							self._key_indexes[i]=self._key_indexes[i] -PAGE_SCROLL
+						self._update_matrix()
+						self._update_nav_buttons()
 			else:
 				button_is_momentary = self._nav_down_button.is_momentary()
 				if button_is_momentary:
@@ -1090,6 +1116,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 						self._key_indexes[0] -= 1
 						self._compute_key_indexes(True,False,True)
 						self._update_matrix()
+						self._update_nav_buttons()
 
 
 	def _nav_left_value(self, value):
@@ -1134,38 +1161,32 @@ class StepSequencerComponent(ControlSurfaceComponent):
 						self._display_bank_time = time.time()
 						self._display_bank = True
 						self._update_matrix()
-						#self._parent._parent.schedule_message(1, self._update_matrix)
 
 	def _update_nav_buttons(self):
 		if self.is_enabled() and self._is_active:
 			if self._sequencer_clip != None and self._sequencer_clip.is_midi_clip:
+				self._nav_left_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
 				if self._bank_index==0:
-					self._nav_left_button.set_on_off_values(GREEN_THIRD,0)
 					self._nav_left_button.turn_on()
 				else:
-					self._nav_left_button.set_on_off_values(GREEN_FULL,0)
-					self._nav_left_button.turn_on()
-			
+					self._nav_left_button.turn_off()
+				self._nav_right_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
 				if (self._bank_index)>=self._loop_end_index:
-					self._nav_right_button.set_on_off_values(GREEN_THIRD,0)
 					self._nav_right_button.turn_on()
 				else:
-					self._nav_right_button.set_on_off_values(GREEN_FULL,0)
-					self._nav_right_button.turn_on()
+					self._nav_right_button.turn_off()
 				
+				self._nav_down_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
 				if self._key_indexes[0]>0:
-					self._nav_down_button.set_on_off_values(GREEN_FULL,0)
 					self._nav_down_button.turn_on()
 				else:
-					self._nav_down_button.set_on_off_values(GREEN_THIRD,0)
-					self._nav_down_button.turn_on()
-					
-				if self._key_indexes[0]<126:
-					self._nav_up_button.set_on_off_values(GREEN_FULL,0)
+					self._nav_down_button.turn_off()
+		
+				self._nav_up_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
+				if self._key_indexes[self._height-1]<127:
 					self._nav_up_button.turn_on()
 				else:
-					self._nav_up_button.set_on_off_values(GREEN_THIRD,0)
-					self._nav_up_button.turn_on()
+					self._nav_up_button.turn_off()
 			else:
 				self._nav_left_button.set_on_off_values(LED_OFF,LED_OFF)
 				self._nav_left_button.turn_off()
@@ -1201,7 +1222,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 						self._update_matrix()
 						
 				key_increment = 0
-				if (self._key_indexes[0] + key_increment) < (128 - self._height + 1) and (self._key_indexes[0] + key_increment) >=0:
+				if (self._key_indexes[self._height-1] + key_increment) < 127 and (self._key_indexes[0] + key_increment) >0:
 					if (self._scroll_down_ticks_delay > -1):
 						if self._is_scrolling():
 							key_increment -= 1
@@ -1220,6 +1241,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 						else:
 							self._compute_key_indexes(True,False,True)	
 						self._update_matrix()
+						self._update_nav_buttons()
 
 	def _find_next_note(self,index,increment):
 		return(index+increment)
