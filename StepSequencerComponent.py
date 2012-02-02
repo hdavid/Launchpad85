@@ -30,7 +30,7 @@ from _Framework.ButtonMatrixElement import ButtonMatrixElement
 import time
 
 #note marking for easier reading.
-MARK_C = True # marked as three block on the left of the grid
+MARK_C = False # marked as three block on the left of the grid
 MARK_C_COLOUR = AMBER_THIRD
 MARK_A = True # marked as one block on the left of the grid.
 MARK_A_COLOUR = AMBER_THIRD
@@ -38,6 +38,8 @@ MARK_FULLTONES = True # marked as one block on the left of the grid
 MARK_FULLTONES_COLOUR = AMBER_THIRD
 MARK_SEMITONES = False # marked as one indented block on the left of the grid
 MARK_SEMITONES_COLOUR = AMBER_THIRD
+MARK_OCTAVE = True
+MARK_OCTAVE_COLOUR = AMBER_THIRD
 
 #Scale 
 SCALE_ON_COLOUR = GREEN_THIRD
@@ -194,9 +196,10 @@ class StepSequencerComponent(ControlSurfaceComponent):
 			self.on_clip_slot_changed()
 			self._update_nav_buttons()
 			if(not self._is_locked):
-				if ((not self.application().view.is_view_visible('Detail')) or (not self.application().view.is_view_visible('Detail/Clip'))):
- 					self.application().view.show_view('Detail')
- 					self.application().view.show_view('Detail/Clip')
+				if self._sequencer_clip !=None and self._sequencer_clip.is_midi_clip:
+					if ((not self.application().view.is_view_visible('Detail')) or (not self.application().view.is_view_visible('Detail/Clip'))):
+ 						self.application().view.show_view('Detail')
+ 						self.application().view.show_view('Detail/Clip')
 			if(self._mode==STEPSEQ_MODE_LANE_MUTE):
 				self._update_lane_mute_buttons()
 			else:
@@ -518,7 +521,15 @@ class StepSequencerComponent(ControlSurfaceComponent):
 
 					if(MARK_A and note%12==9):
 						self._grid_back_buffer[0][note_grid_y_position] = MARK_C_COLOUR
-	
+						
+					if(MARK_OCTAVE and note%12==0):
+						octave = ((note/12)-2)
+						if octave > 0 :
+							for note_grid_x_position in range(0,octave%(self._width)):
+								self._grid_back_buffer[note_grid_x_position][note_grid_y_position] = MARK_OCTAVE_COLOUR
+						if octave < 0 :
+							for note_grid_x_position in range(self._width+octave,self._width):
+								self._grid_back_buffer[note_grid_x_position][note_grid_y_position] = MARK_OCTAVE_COLOUR
 	
 	def _update_matrix_bank(self):
 		for i in range(0,self._height):

@@ -141,9 +141,23 @@ class MainSelectorComponent(ModeSelectorComponent):
 				self._modes_buttons[index].turn_off()
 
 	def channel_for_current_mode(self):
-		new_channel = (self._mode_index + self._sub_modes.mode())
-		if (new_channel > 0):
-			new_channel += 3
+		#trying to keep 
+		if self._mode_index==0:
+			return 0
+		elif self._mode_index==1:
+			if self._sub_mode_index[self._mode_index]==0:
+				new_channel=4#user 1
+			else : 
+				new_channel = 1#device ctrl
+		elif self._mode_index==2:
+			if self._sub_mode_index[self._mode_index]==0:	
+				new_channel=5#user 2
+			else: 
+				new_channel = 1 + self._sub_mode_index[self._mode_index]
+		elif self._mode_index==3:#mixer modes
+			new_channel = 6 + self._sub_modes.mode()
+		#if (new_channel > 0):
+		#	new_channel += 3
 		return new_channel
 
 
@@ -184,7 +198,6 @@ class MainSelectorComponent(ModeSelectorComponent):
 			if (self._mode_index == 0):
 				#session
 				self._setup_mixer((not as_active))
-				self._setup_quick_mix((not as_active))
 				self._setup_device_controller((not as_active))
 				self._setup_step_sequencer((not as_active),0)
 				self._setup_device_controller((not as_active))
@@ -193,34 +206,30 @@ class MainSelectorComponent(ModeSelectorComponent):
 				#user mode + device controller
 				self._setup_mixer((not as_active))
 				if (self._sub_mode_index[self._mode_index]==0):
-					self._setup_session((not as_active), (as_enabled))
 					self._setup_step_sequencer((not as_active),0)
-					self._setup_quick_mix(as_active)
 					self._setup_device_controller((not as_active))
+					self._setup_session((not as_active), (as_enabled))
 					self._setup_user1(True,True,True)
 				else:
 					self._setup_session((not as_active), (not as_enabled))
 					self._setup_step_sequencer((not as_active),0)
-					self._setup_quick_mix(as_active)
 					self._setup_device_controller((as_active))
 					
 			elif (self._mode_index == 2):
 				self._setup_session((not as_active), (not as_enabled))
 				self._setup_mixer((not as_active))
-				self._setup_quick_mix((not as_active))
 				self._setup_device_controller((not as_active))
 				if (self._sub_mode_index[self._mode_index]==0):
-					self._setup_user2(release_buttons)
 					self._setup_device_controller((not as_active))
 					self._setup_step_sequencer((not as_active),0)
+					self._setup_user2(release_buttons)
 				else:
-					self._setup_step_sequencer(as_active,self._sub_mode_index[self._mode_index])
 					self._setup_device_controller((not as_active))
-					
+					self._setup_step_sequencer(as_active,self._sub_mode_index[self._mode_index])
+						
 			elif (self._mode_index == 3):
 				self._setup_step_sequencer((not as_active),0)
 				self._setup_device_controller((not as_active))
-				self._setup_quick_mix((not as_active))
 				self._setup_session((not as_active), as_enabled)
 				self._setup_mixer(as_active)
 			else:
