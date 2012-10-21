@@ -11,6 +11,10 @@ from ConfigurableButtonElement import ConfigurableButtonElement
 from MainSelectorComponent import MainSelectorComponent 
 SIDE_NOTES = (8, 24, 40, 56, 72, 88, 104, 120)
 DRUM_NOTES = (41, 42, 43, 44, 45, 46, 47, 57, 58, 59, 60, 61, 62, 63, 73, 74, 75, 76, 77, 78, 79, 89, 90, 91, 92, 93, 94, 95, 105, 106, 107)
+DO_COMBINE = Live.Application.combine_apcs() #requires 8.2 & higher
+LINK_SESSION = False
+LINK_STEPSEQ = False
+
 class Launchpad(ControlSurface):
 	" Script for Novation's Launchpad Controller "
 
@@ -62,6 +66,7 @@ class Launchpad(ControlSurface):
 		side_buttons[7].name = "Arm_Button"
 		self._selector = MainSelectorComponent(matrix, tuple(top_buttons), tuple(side_buttons), self._config_button, self)
 		self._selector.name = "Main_Modes"
+		self._do_combine()
 		for control in self.controls:
 			if isinstance(control, ConfigurableButtonElement):
 				control.add_value_listener(self._button_value)
@@ -76,7 +81,7 @@ class Launchpad(ControlSurface):
 		for control in self.controls:
 			if isinstance(control, ConfigurableButtonElement):
 				control.remove_value_listener(self._button_value)
-
+		self._do_uncombine()
 		self._selector = None
 		self._user_byte_write_button.remove_value_listener(self._user_byte_value)
 		self._config_button.remove_value_listener(self._config_value)
@@ -87,6 +92,40 @@ class Launchpad(ControlSurface):
 		self._config_button = None
 		self._user_byte_write_button.send_value(0)
 		self._user_byte_write_button = None
+
+	_active_instances = []
+
+	def _combine_active_instances():
+		support_devices = False
+		for instance in Launchpad._active_instances:
+			support_devices |= (instance._device_component != None)
+		offset = 0
+		for instance in Launchpad._active_instances:
+			instance._activate_combination_mode(offset, support_devices)
+			offset += instance._selector._session.width()
+
+	_combine_active_instances = staticmethod(_combine_active_instances)
+
+	def _activate_combination_mode(self, track_offset, support_devices):
+		if(LINK_STEPSEQ):
+			self._selector._stepseq.link_with_step_offset(track_offset)
+		if(LINK_SESSION):
+			self._selector._session.link_with_track_offset(track_offset)
+		
+
+	def _do_combine(self):
+		if (DO_COMBINE and (self not in Launchpad._active_instances)):
+			Launchpad._active_instances.append(self)
+			Launchpad._combine_active_instances()
+	
+	def _do_uncombine(self):
+		if self in Launchpad._active_instances:
+			Launchpad._active_instances.remove(self)
+			if(LINK_SESSION):
+				self._selector._session.unlink()
+			if(LINK_STEPSEQ):
+				self._selector._stepseq.unlink()
+			Launchpad._combine_active_instances()
 
 
 
