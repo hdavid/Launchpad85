@@ -93,16 +93,16 @@ class DeviceControllerComponent(DeviceComponent):
 		
 #DEVICE SELECTION
 	def _on_device_changed(self):
-		if self.is_enabled():
- 			if self._locked_to_device != True:		
-				self.set_device(self.song().appointed_device)
+ 		if self._locked_to_device != True:		
+			self.set_device(self.song().appointed_device)
+			if self.is_enabled():
 				self.update()
 	
 	def on_selected_track_changed(self):
-		if self.is_enabled():
- 			if self._locked_to_device != True:
- 				track = self.song().view.selected_track
-  				self.set_device(track.view.selected_device)
+ 		if self._locked_to_device != True:
+ 			track = self.song().view.selected_track
+  			self.set_device(track.view.selected_device)
+			if self.is_enabled():
 				self.update()
 					
 	def set_device(self,device):
@@ -161,7 +161,6 @@ class DeviceControllerComponent(DeviceComponent):
 	def update_lock_button(self):
 		#lock button
 		if (self._lock_button!=None and self.is_enabled()):
-			
 			if (self._device != None):
 				self._lock_button.set_on_off_values(RED_FULL,RED_THIRD)
 				if (self._locked_to_device):
@@ -380,6 +379,5 @@ class DeviceControllerComponent(DeviceComponent):
 				return i
 		return(False)
 
-
-# local variables:
-# tab-width: 4
+	def log_message(self, message):
+		self._parent.log_message(message)

@@ -101,9 +101,6 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		self._multiline_mode=False
 		
 		#loop 
-		self._loop_start_index = 0
-		self._loop_end_index = 7
-		self._loop_index_length = 0
 		self._loop_length = None
 		self._loop_start = None
 		self._loop_end = None		
@@ -201,7 +198,18 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		self._muted_lanes = None
 		self._lock_button = None
 
-
+	def update_buttons(self):
+		self._update_lane_mute_buttons()
+		self._update_quantization_button()
+		self._update_fold_button()
+		self._update_scale_fold_button()
+		self._update_lock_button()
+		self._update_velocity_button()
+		self._update_mute_shift_button()
+		self._update_loop_length_inc_button()
+		self._update_loop_length_dec_button()
+		
+			
 	def update(self):
 		if self._is_active:
 			self.on_clip_slot_changed()
@@ -211,18 +219,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 					if ((not self.application().view.is_view_visible('Detail')) or (not self.application().view.is_view_visible('Detail/Clip'))):
  						self.application().view.show_view('Detail')
  						self.application().view.show_view('Detail/Clip')
-			if(self._mode==STEPSEQ_MODE_LANE_MUTE):
-				self._update_lane_mute_buttons()
-			else:
-				self._update_quantization_button()
-				self._update_fold_button()
-				self._update_scale_fold_button()
-				self._update_lock_button()
-				self._update_velocity_button()
-				self._update_mute_shift_button()
-				self._update_loop_length_inc_button()
-				self._update_loop_length_dec_button()
-			
+			self.update_buttons()
 			self._on_loop_changed()
 			self._compute_key_indexes()
 			self._update_matrix()
@@ -295,21 +292,10 @@ class StepSequencerComponent(ControlSurfaceComponent):
 	def _on_loop_changed(self): #loop start/end listener
 		if self.is_enabled() and self._is_active:
 			if self._sequencer_clip != None:
-				self._loop_start_index = int(self._sequencer_clip.loop_start / self._quantization / self._width)
-				self._loop_end_index = int(self._sequencer_clip.loop_end / self._quantization / self._width) - 1 #round down to next button
-				#self._parent._parent.log_message(str(self._sequencer_clip.loop_end)+" "+str(self._loop_end_index))
 				self._loop_length = self._sequencer_clip.loop_end - self._sequencer_clip.loop_start
-				loop_index_length = self._loop_end_index - self._loop_start_index + 1
-				if loop_index_length != self._loop_index_length:
-					self._loop_index_length = loop_index_length
-				#if self._loop_start_index > (self._width -1):
-				#	self._loop_start_index = -1
-				#elif self._loop_start_index < 0:
-				#	self._loop_start_index = 0
-				#if self._loop_end_index > (self._width -1):
-				#	self._loop_end_index = (self._width -1)
-				elif self._loop_end_index < 0:
-					self._loop_end_index = -1
+				self._loop_start = self._sequencer_clip.loop_start
+				self._loop_end = self._sequencer_clip.loop_end
+
 # MUTE LANES
 
 	def _update_lane_mute_buttons(self): #shifted lane mute buttons
@@ -765,10 +751,10 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		if self.is_enabled() and self._is_active and self._mode==STEPSEQ_MODE_NORMAL:
 			if self._sequencer_clip != None:
 				if ((value is not 0) or (not sender.is_momentary())):
-					self._loop_index_length = self._loop_index_length - 1
-					self._loop_end = self._sequencer_clip.loop_start + (self._loop_index_length * self._width * self._quantization)
-					self._sequencer_clip.loop_end = self._loop_end
-			self._update_nav_buttons()
+					if(self._loop_end - self._width * self._quantization >=0):
+						self._loop_end -= self._width * self._quantization
+						self._sequencer_clip.loop_end = self._loop_end
+					self._update_nav_buttons()
 			
 	def _update_loop_length_dec_button(self):
 		if self._is_active:
@@ -798,9 +784,8 @@ class StepSequencerComponent(ControlSurfaceComponent):
 		if self.is_enabled() and self._is_active and self._mode==STEPSEQ_MODE_NORMAL:
 			if self._sequencer_clip != None:
 				if ((value is not 0) or (not sender.is_momentary())):
-					self._loop_index_length = self._loop_index_length + 1
 					old_loop_end = self._loop_end
-					self._loop_end = self._sequencer_clip.loop_start + (self._loop_index_length * self._width * self._quantization)
+					self._loop_end += self._width * self._quantization
 					self._sequencer_clip.loop_end = self._loop_end
 					self._extend_clip_content(old_loop_end,self._loop_end)
 			self._update_nav_buttons()
@@ -823,16 +808,11 @@ class StepSequencerComponent(ControlSurfaceComponent):
 				while(power*2 < old_loop_end ):
 					power*=2
 				clip_looping_length = (power)
-			self._parent._parent.log_message("message")
-			self._parent._parent.log_message(str(old_loop_end))
-			self._parent._parent.log_message(str(new_loop_end))
-			self._parent._parent.log_message(str(clip_looping_length))
 			clone_length = new_loop_end-old_loop_end
 			if(clip_looping_length>0):
 				clone_start_point = (old_loop_end%clip_looping_length)
 			else:
 				clone_start_point = 0
-			self._parent._parent.log_message(str(clone_start_point))
 			self._copy_notes_in_range(clone_start_point, clone_start_point+ clone_length, old_loop_end)
 			
 	def _no_notes_in_range(self, start, end, or_after):
@@ -1237,7 +1217,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 					else:
 						self._scroll_right_ticks_delay = -1			
 				if ((value != 0) or (not self._nav_right_button.is_momentary())):
-					if (self._bank_index)<self._loop_end_index:
+					if (self._bank_index+1)<int(self._sequencer_clip.loop_end / self._quantization / self._width):
 						self._bank_index += 1
 						self._update_nav_buttons()
 						self._display_bank_time = time.time()
@@ -1253,7 +1233,7 @@ class StepSequencerComponent(ControlSurfaceComponent):
 				else:
 					self._nav_left_button.turn_on()
 				self._nav_right_button.set_on_off_values(GREEN_FULL,GREEN_THIRD)
-				if (self._bank_index)>=self._loop_end_index:
+				if (self._bank_index+1)>=int(self._sequencer_clip.loop_end / self._quantization / self._width):
 					self._nav_right_button.turn_off()
 				else:
 					self._nav_right_button.turn_on()
